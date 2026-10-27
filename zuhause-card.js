@@ -1,7 +1,7 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 const DEFAULTS = {
   name: '',
@@ -193,6 +193,9 @@ class ZuhauseCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    this._cams = this._camList();
+    const sig = this._cams.map(m => m.id + '|' + m.name).join(',');
+    if (sig !== this._camSig) { this._camSig = sig; this._built = false; }
     if (!this._built) this._build();
     this.classList.toggle('dark', !!(hass.themes && hass.themes.darkMode));
     this._update();
@@ -226,7 +229,7 @@ class ZuhauseCard extends HTMLElement {
       <div class="v num"><span data-k="rt${i}">–</span><small> °C</small></div><div class="h num" data-k="rh${i}"></div></div>`).join('');
     const sws = c.switches.map((s, i) => `<div class="row"><div class="ico">${svg(s.icon)}</div><div class="txt" data-more="${s.entity}"><b id="swl${i}">${s.name}</b><span data-k="sws${i}"></span>${s.entity.startsWith('light.') ? `<input type="range" class="dim" min="1" max="100" step="1" aria-label="${s.name} dimmen" data-dim="${s.entity}" data-k="swd${i}" hidden>` : ''}</div>
       <button class="tg" role="switch" aria-labelledby="swl${i}" aria-checked="false" data-toggle="${s.entity}" data-k="swt${i}"></button></div>`).join('');
-    const cams = c.cameras.map((m, i) => `<div class="cam" data-cam="${i}"><div class="view" data-k="cv${i}">${svg('cam')}</div>
+    const cams = this._cams.map((m, i) => `<div class="cam" data-cam="${i}"><div class="view" data-k="cv${i}">${svg('cam')}</div>
       <div class="meta"><b>${m.name}</b><span data-k="cs${i}">${m.brand}</span></div></div>`).join('');
     const contacts = c.contacts.map((k, i) => `<div class="row"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span></div>`).join('');
 
@@ -312,7 +315,7 @@ class ZuhauseCard extends HTMLElement {
       </section>
 
       <section class="card cams">
-        <div class="eyebrow"><span>Kameras</span><span>${[...new Set(c.cameras.map(m => m.brand).filter(Boolean))].join(' · ')}</span></div>
+        <div class="eyebrow"><span>Kameras</span><span>${[...new Set(this._cams.map(m => m.brand).filter(Boolean))].join(' · ')}</span></div>
         <h2>Rund ums Haus</h2><p class="sub">Antippen öffnet das Livebild</p>
         <div class="camg">${cams}</div>
       </section>
@@ -357,7 +360,7 @@ class ZuhauseCard extends HTMLElement {
       if (sc) { this._hass.callService('scene', 'turn_on', { entity_id: sc.dataset.scene }); return; }
       const cam = e.target.closest('[data-cam]');
       if (cam) {
-        const id = this._camId(this._cfg.cameras[+cam.dataset.cam]);
+        const id = this._cams[+cam.dataset.cam].id;
         if (id) this._more(id);
         return;
       }
@@ -367,40 +370,38 @@ class ZuhauseCard extends HTMLElement {
     this._built = true;
   }
 
-  // Kamera-Entität: feste ID, Suche per Stichwort (find/Name) oder freie Kamera der Marke
-  _camId(m) { return this._camMap()[this._cfg.cameras.indexOf(m)] || null; }
-
-  _camMap() {
+  // Kameras: feste ID, Suche per Stichwort (find/Name), sonst freie Kameras der Marke.
+  // Weitere Kameras in Home Assistant werden automatisch angehängt.
+  _camList() {
     const cams = this._cfg.cameras, st = this._hass.states;
     const all = Object.keys(st).filter(id => id.startsWith('camera.')).sort();
-    const map = [], keys = [];
-    cams.forEach((m, i) => {
-      if (m.entity && st[m.entity]) { map[i] = m.entity; return; }
+    const out = cams.map(m => Object.assign({}, m, { id: null })), keys = [];
+    out.forEach(m => {
+      if (m.entity && st[m.entity]) { m.id = m.entity; return; }
       const f = this._key(m);
       const ids = f ? all.filter(id => id.includes(f)) : [];
       const id = ids.find(x => !/clear|klar|snapshot/.test(x)) || ids[0];
-      if (id) { map[i] = id; keys.push(f); }
+      if (id) { m.id = id; keys.push(f); }
     });
-    // übrige Einträge: noch freie Kameras, deren ID/Name/Quelle die Marke enthält
-    const used = new Set(map.filter(Boolean));
-    cams.forEach((m, i) => {
-      if (map[i] || !m.brand) return;
+    const used = new Set(out.map(m => m.id).filter(Boolean));
+    const free = x => !used.has(x) && !keys.some(k => x.includes(k));
+    const take = (m, id) => { m.id = id; m.name = st[id].attributes.friendly_name || m.name; m.auto = true; used.add(id); };
+    out.forEach(m => {
+      if (m.id || !m.brand) return;
       const b = m.brand.toLowerCase();
       const id = all.find(x => {
-        if (used.has(x) || keys.some(k => x.includes(k))) return false;
+        if (!free(x)) return false;
         const a = st[x].attributes;
         const txt = (x + ' ' + (a.friendly_name || '') + ' ' + (a.attribution || '')).toLowerCase();
         return txt.includes(b) || (b === 'blink' && txt.includes('immedia'));
       });
-      if (id) { map[i] = id; used.add(id); this._camAuto = this._camAuto || {}; this._camAuto[i] = true; }
+      if (id) take(m, id);
     });
-    // falls die Marke nirgends steht: restliche freie Kameras der Reihe nach
-    cams.forEach((m, i) => {
-      if (map[i] || !m.brand) return;
-      const id = all.find(x => !used.has(x) && !keys.some(k => x.includes(k)));
-      if (id) { map[i] = id; used.add(id); this._camAuto = this._camAuto || {}; this._camAuto[i] = true; }
-    });
-    return map;
+    out.forEach(m => { if (m.id || !m.brand) return; const id = all.find(free); if (id) take(m, id); });
+    // übrige Kameras anhängen, Marke von den automatisch zugeordneten übernehmen
+    const auto = out.find(m => m.auto);
+    all.filter(free).forEach(id => out.push({ name: st[id].attributes.friendly_name || id, brand: auto ? auto.brand : '', id }));
+    return out;
   }
 
   // Suchwort: find oder aus dem Namen (Haustür -> haustuer)
@@ -542,12 +543,12 @@ class ZuhauseCard extends HTMLElement {
     });
 
     // Kameras
-    c.cameras.forEach((m, i) => {
-      const s = this._s(this._camId(m)), v = k['cv' + i];
+    this._cams.forEach((m, i) => {
+      const s = this._s(m.id), v = k['cv' + i];
       if (s && s.attributes.entity_picture) {
         const src = s.attributes.entity_picture;
         if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live">LIVE</span>`; }
-        this._set('cs' + i, this._camAuto && this._camAuto[i] ? `${m.brand} · ${s.attributes.friendly_name}` : m.brand);
+        this._set('cs' + i, m.brand);
       } else {
         if (v.dataset.src !== '') { v.dataset.src = ''; v.innerHTML = svg('cam'); }
         this._set('cs' + i, m.app ? `${m.brand} · nur App` : `${m.brand} · folgt`);
@@ -561,7 +562,7 @@ class ZuhauseCard extends HTMLElement {
       const min = Math.round((Date.now() - new Date(s.last_changed)) / 60000);
       hints.push([`${x.name} offen`, min < 60 ? `seit ${min} min` : `seit ${Math.round(min / 60)} h`, 'warn']);
     });
-    c.cameras.forEach(m => { if (this._ringing(m)) hints.push([`Es klingelt: ${m.name}`, 'jetzt', 'warn']); });
+    this._cams.forEach(m => { if (this._ringing(m)) hints.push([`Es klingelt: ${m.name}`, 'jetzt', 'warn']); });
     lost.forEach(x => hints.push([`${x.name} meldet sich nicht`, 'Batterie?', 'warn']));
     Object.values(this._hass.states).forEach(s => {
       if (s.attributes.device_class === 'battery' && s.entity_id.startsWith('sensor.')) {
