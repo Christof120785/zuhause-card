@@ -1,7 +1,7 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 
 const DEFAULTS = {
   name: '',
@@ -184,6 +184,8 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 class ZuhauseCard extends HTMLElement {
   setConfig(config) {
     this._cfg = Object.assign({}, DEFAULTS, config || {});
+    // Kameras ohne Bild in Home Assistant (app: true) werden nicht angezeigt
+    this._cfg.cameras = (this._cfg.cameras || []).filter(m => !m.app);
     this._built = false;
   }
   getCardSize() { return 20; }
@@ -368,16 +370,22 @@ class ZuhauseCard extends HTMLElement {
   // Kamera-Entität: feste ID oder Suche per Stichwort (find: haustuer)
   _camId(m) {
     if (m.entity && this._s(m.entity)) return m.entity;
-    if (!m.find) return null;
-    const f = m.find.toLowerCase();
+    const f = this._key(m);
+    if (!f) return null;
     const ids = Object.keys(this._hass.states).filter(id => id.startsWith('camera.') && id.includes(f));
     return ids.find(id => !/clear|klar|snapshot/.test(id)) || ids[0] || null;
   }
 
+  // Suchwort: find oder aus dem Namen (Haustür -> haustuer)
+  _key(m) {
+    const t = (m.find || m.name || '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
+    return t.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  }
+
   // Klingel gedrückt? binary_sensor mit Stichwort und Besucher/Visitor
   _ringing(m) {
-    if (!m.find) return false;
-    const f = m.find.toLowerCase();
+    const f = this._key(m);
+    if (!f) return false;
     return Object.values(this._hass.states).some(s => s.entity_id.startsWith('binary_sensor.') && s.entity_id.includes(f)
       && /besucher|visitor/.test(s.entity_id) && s.state === 'on');
   }

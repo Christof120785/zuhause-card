@@ -37,4 +37,4 @@ cameras:
     entity: camera.garten
 ```
 
-Mit `find` erscheint außerdem ein Hinweis „Es klingelt“, solange ein passender Besucher-Sensor (`binary_sensor.*haustuer*besucher*` bzw. `*visitor*`) an ist.
+Ohne `entity` und `find` sucht die Karte nach dem Namen (Haustür -> camera.*haustuer*). Einträge mit `app: true` werden ausgeblendet. Es erscheint außerdem ein Hinweis „Es klingelt“, solange ein passender Besucher-Sensor (`binary_sensor.*haustuer*besucher*` bzw. `*visitor*`) an ist.
