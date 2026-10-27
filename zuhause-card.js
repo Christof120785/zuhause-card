@@ -1,6 +1,8 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
+const VERSION = '1.1.0';
+
 const DEFAULTS = {
   name: '',
   images: '/local/dashboard/',
@@ -74,7 +76,8 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .pill.warn{background:var(--warn-soft);color:var(--warn)}
 .pill.info{background:var(--grid-soft);color:var(--grid)}
 /* hero */
-.hero{background:var(--hero);color:var(--hero-fg);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.hero{position:relative;background:var(--hero);color:var(--hero-fg);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.ver{position:absolute;top:6px;right:12px;font-size:9px;color:var(--hero-mut);opacity:.6;letter-spacing:.04em}
 .hero h1{font-family:var(--display);font-size:26px;line-height:1.1;margin:0;font-weight:700;letter-spacing:-.02em}
 .hero h1 em{font-style:normal;color:#b9e3c8}
 .hero p{color:var(--hero-mut);font-size:12.5px;margin:4px 0 10px}
@@ -226,7 +229,7 @@ class ZuhauseCard extends HTMLElement {
     const contacts = c.contacts.map((k, i) => `<div class="row"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span></div>`).join('');
 
     root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="grid">
-      <section class="card hero">
+      <section class="card hero"><span class="ver">v${VERSION}</span>
         <div><h1><span data-k="greet">Hallo</span>,<br><em>${c.name}.</em></h1>
           <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
           <div class="chips"><span class="chip" data-k="chOpen"></span><span class="chip" data-k="chLights"></span></div></div>
