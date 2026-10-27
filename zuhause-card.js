@@ -1,7 +1,7 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 const DEFAULTS = {
   name: '',
@@ -355,14 +355,31 @@ class ZuhauseCard extends HTMLElement {
       if (sc) { this._hass.callService('scene', 'turn_on', { entity_id: sc.dataset.scene }); return; }
       const cam = e.target.closest('[data-cam]');
       if (cam) {
-        const m = this._cfg.cameras[+cam.dataset.cam];
-        if (m.entity && this._s(m.entity)) this._more(m.entity);
+        const id = this._camId(this._cfg.cameras[+cam.dataset.cam]);
+        if (id) this._more(id);
         return;
       }
       const m = e.target.closest('[data-more]');
       if (m && m.dataset.more) this._more(m.dataset.more);
     });
     this._built = true;
+  }
+
+  // Kamera-Entität: feste ID oder Suche per Stichwort (find: haustuer)
+  _camId(m) {
+    if (m.entity && this._s(m.entity)) return m.entity;
+    if (!m.find) return null;
+    const f = m.find.toLowerCase();
+    const ids = Object.keys(this._hass.states).filter(id => id.startsWith('camera.') && id.includes(f));
+    return ids.find(id => !/clear|klar|snapshot/.test(id)) || ids[0] || null;
+  }
+
+  // Klingel gedrückt? binary_sensor mit Stichwort und Besucher/Visitor
+  _ringing(m) {
+    if (!m.find) return false;
+    const f = m.find.toLowerCase();
+    return Object.values(this._hass.states).some(s => s.entity_id.startsWith('binary_sensor.') && s.entity_id.includes(f)
+      && /besucher|visitor/.test(s.entity_id) && s.state === 'on');
   }
 
   _more(entityId) {
@@ -491,7 +508,7 @@ class ZuhauseCard extends HTMLElement {
 
     // Kameras
     c.cameras.forEach((m, i) => {
-      const s = this._s(m.entity), v = k['cv' + i];
+      const s = this._s(this._camId(m)), v = k['cv' + i];
       if (s && s.attributes.entity_picture) {
         const src = s.attributes.entity_picture;
         if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live">LIVE</span>`; }
@@ -509,6 +526,7 @@ class ZuhauseCard extends HTMLElement {
       const min = Math.round((Date.now() - new Date(s.last_changed)) / 60000);
       hints.push([`${x.name} offen`, min < 60 ? `seit ${min} min` : `seit ${Math.round(min / 60)} h`, 'warn']);
     });
+    c.cameras.forEach(m => { if (this._ringing(m)) hints.push([`Es klingelt: ${m.name}`, 'jetzt', 'warn']); });
     lost.forEach(x => hints.push([`${x.name} meldet sich nicht`, 'Batterie?', 'warn']));
     Object.values(this._hass.states).forEach(s => {
       if (s.attributes.device_class === 'battery' && s.entity_id.startsWith('sensor.')) {

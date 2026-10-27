@@ -24,3 +24,17 @@ scene_rooms: [Wohnzimmer]
 ```
 
 Bilder (`haus.webp`, `auto.webp`, `wallbox.webp`, `anker.webp`) liegen lokal unter `/config/www/dashboard/`; der Pfad lässt sich mit `images:` ändern.
+
+## Kameras
+
+```yaml
+cameras:
+  - name: Haustür
+    brand: Reolink
+    find: haustuer        # sucht camera.*haustuer* selbst, statt fester entity
+  - name: Garten
+    brand: Blink
+    entity: camera.garten
+```
+
+Mit `find` erscheint außerdem ein Hinweis „Es klingelt“, solange ein passender Besucher-Sensor (`binary_sensor.*haustuer*besucher*` bzw. `*visitor*`) an ist.
