@@ -1,7 +1,7 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
-const VERSION = '1.2.2';
+const VERSION = '1.3.0';
 
 const DEFAULTS = {
   name: '',
@@ -367,13 +367,40 @@ class ZuhauseCard extends HTMLElement {
     this._built = true;
   }
 
-  // Kamera-Entität: feste ID oder Suche per Stichwort (find: haustuer)
-  _camId(m) {
-    if (m.entity && this._s(m.entity)) return m.entity;
-    const f = this._key(m);
-    if (!f) return null;
-    const ids = Object.keys(this._hass.states).filter(id => id.startsWith('camera.') && id.includes(f));
-    return ids.find(id => !/clear|klar|snapshot/.test(id)) || ids[0] || null;
+  // Kamera-Entität: feste ID, Suche per Stichwort (find/Name) oder freie Kamera der Marke
+  _camId(m) { return this._camMap()[this._cfg.cameras.indexOf(m)] || null; }
+
+  _camMap() {
+    const cams = this._cfg.cameras, st = this._hass.states;
+    const all = Object.keys(st).filter(id => id.startsWith('camera.')).sort();
+    const map = [], keys = [];
+    cams.forEach((m, i) => {
+      if (m.entity && st[m.entity]) { map[i] = m.entity; return; }
+      const f = this._key(m);
+      const ids = f ? all.filter(id => id.includes(f)) : [];
+      const id = ids.find(x => !/clear|klar|snapshot/.test(x)) || ids[0];
+      if (id) { map[i] = id; keys.push(f); }
+    });
+    // übrige Einträge: noch freie Kameras, deren ID/Name/Quelle die Marke enthält
+    const used = new Set(map.filter(Boolean));
+    cams.forEach((m, i) => {
+      if (map[i] || !m.brand) return;
+      const b = m.brand.toLowerCase();
+      const id = all.find(x => {
+        if (used.has(x) || keys.some(k => x.includes(k))) return false;
+        const a = st[x].attributes;
+        const txt = (x + ' ' + (a.friendly_name || '') + ' ' + (a.attribution || '')).toLowerCase();
+        return txt.includes(b) || (b === 'blink' && txt.includes('immedia'));
+      });
+      if (id) { map[i] = id; used.add(id); this._camAuto = this._camAuto || {}; this._camAuto[i] = true; }
+    });
+    // falls die Marke nirgends steht: restliche freie Kameras der Reihe nach
+    cams.forEach((m, i) => {
+      if (map[i] || !m.brand) return;
+      const id = all.find(x => !used.has(x) && !keys.some(k => x.includes(k)));
+      if (id) { map[i] = id; used.add(id); this._camAuto = this._camAuto || {}; this._camAuto[i] = true; }
+    });
+    return map;
   }
 
   // Suchwort: find oder aus dem Namen (Haustür -> haustuer)
@@ -520,7 +547,7 @@ class ZuhauseCard extends HTMLElement {
       if (s && s.attributes.entity_picture) {
         const src = s.attributes.entity_picture;
         if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live">LIVE</span>`; }
-        this._set('cs' + i, m.brand);
+        this._set('cs' + i, this._camAuto && this._camAuto[i] ? `${m.brand} · ${s.attributes.friendly_name}` : m.brand);
       } else {
         if (v.dataset.src !== '') { v.dataset.src = ''; v.innerHTML = svg('cam'); }
         this._set('cs' + i, m.app ? `${m.brand} · nur App` : `${m.brand} · folgt`);
