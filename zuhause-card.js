@@ -593,6 +593,6 @@ class ZuhauseCard extends HTMLElement {
   }
 }
 
-customElements.define('zuhause-card', ZuhauseCard);
+if (!customElements.get('zuhause-card')) customElements.define('zuhause-card', ZuhauseCard);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: 'zuhause-card', name: 'Zuhause', description: 'Startseite mit Energie, Sicherheit, Raumklima, Kameras und Wetter' });
