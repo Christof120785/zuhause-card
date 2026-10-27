@@ -1,7 +1,7 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
-const VERSION = '1.2.1';
+const VERSION = '1.2.2';
 
 const DEFAULTS = {
   name: '',
@@ -312,7 +312,7 @@ class ZuhauseCard extends HTMLElement {
       </section>
 
       <section class="card cams">
-        <div class="eyebrow"><span>Kameras</span><span>Reolink · Blink · Aosu</span></div>
+        <div class="eyebrow"><span>Kameras</span><span>${[...new Set(c.cameras.map(m => m.brand).filter(Boolean))].join(' · ')}</span></div>
         <h2>Rund ums Haus</h2><p class="sub">Antippen öffnet das Livebild</p>
         <div class="camg">${cams}</div>
       </section>
