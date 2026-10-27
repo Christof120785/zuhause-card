@@ -1,7 +1,7 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
-const VERSION = '1.4.0';
+const VERSION = '1.4.1';
 
 const DEFAULTS = {
   name: '',
@@ -165,6 +165,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .cam .view{aspect-ratio:16/9;max-width:100%;position:relative;display:grid;place-items:center;background:var(--house-soft);color:var(--muted)}
 .cam .view img{width:100%;height:100%;object-fit:cover;display:block}
 .cam .view svg{width:28px;height:28px;opacity:.6}
+.cam .live.foto{background:rgba(40,40,50,.75)}
 .cam .live{position:absolute;top:6px;left:6px;background:rgba(200,30,30,.9);color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:5px}
 .cam .meta{padding:6px 9px;display:flex;justify-content:space-between;gap:6px;align-items:center;font-size:12.5px}
 .cam .meta span{font-size:11px;color:var(--muted)}
@@ -361,7 +362,13 @@ class ZuhauseCard extends HTMLElement {
       const cam = e.target.closest('[data-cam]');
       if (cam) {
         const id = this._cams[+cam.dataset.cam].id;
-        if (id) this._more(id);
+        if (!id) return;
+        // Kameras ohne Livestream (z. B. Blink-Akkukameras): neues Foto anfordern
+        if (!this._stream(id) && this._hass.services.blink && this._hass.services.blink.trigger_camera) {
+          this._hass.callService('blink', 'trigger_camera', { entity_id: id }).catch(() => {});
+          setTimeout(() => this._hass.callService('homeassistant', 'update_entity', { entity_id: id }).catch(() => {}), 6000);
+        }
+        this._more(id);
         return;
       }
       const m = e.target.closest('[data-more]');
@@ -417,6 +424,8 @@ class ZuhauseCard extends HTMLElement {
     return Object.values(this._hass.states).some(s => s.entity_id.startsWith('binary_sensor.') && s.entity_id.includes(f)
       && /besucher|visitor/.test(s.entity_id) && s.state === 'on');
   }
+
+  _stream(id) { const s = this._s(id); return !!(s && (s.attributes.supported_features & 2)); }
 
   _more(entityId) {
     const ev = new Event('hass-more-info', { bubbles: true, composed: true });
@@ -547,7 +556,7 @@ class ZuhauseCard extends HTMLElement {
       const s = this._s(m.id), v = k['cv' + i];
       if (s && s.attributes.entity_picture) {
         const src = s.attributes.entity_picture;
-        if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live">LIVE</span>`; }
+        if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live${this._stream(m.id) ? '' : ' foto'}">${this._stream(m.id) ? 'LIVE' : 'FOTO'}</span>`; }
         this._set('cs' + i, m.brand);
       } else {
         if (v.dataset.src !== '') { v.dataset.src = ''; v.innerHTML = svg('cam'); }
