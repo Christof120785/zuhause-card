@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.9.0';
+const VERSION = '2.9.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -970,11 +970,11 @@ class ZuhauseCard extends HTMLElement {
       return true;
     }
     if (d.arm) { this._armAsk = d.arm; this._renderAlarm(); return true; }
-    if (d.door !== undefined) { this._doorAsk = true; this._renderAlarm(); return true; }
+    if (d.door !== undefined) { if (this._armed(this._alarmEnt()) !== true) this._doorAsk = true; this._renderAlarm(); return true; }
     if (d.doorNo !== undefined) { this._doorAsk = false; this._renderAlarm(); return true; }
     if (d.doorYes !== undefined) {
       const id = this._doorEnt();
-      if (id) h.callService('button', 'press', { entity_id: id });
+      if (id && this._armed(this._alarmEnt()) !== true) h.callService('button', 'press', { entity_id: id });
       this._doorAsk = false; this._doorSent = Date.now(); this._renderAlarm();
       setTimeout(() => this._renderAlarm(), 6500);
       return true;
@@ -992,8 +992,10 @@ class ZuhauseCard extends HTMLElement {
     return ids.find(x => /_p_ht$/.test(x))
       || ids.find(x => /^(p )?ht( (ö|oe)ffnen)?$|haust(ü|ue)r (auf|(ö|oe)ffnen)/i.test((st[x].attributes.friendly_name || '').trim())) || null;
   }
-  _doorHtml() {
+  _doorHtml(armed) {
     if (!this._doorEnt()) return '';
+    // bei scharfer Alarmanlage nicht öffnen
+    if (armed) return `<div class="ab one"><button class="door" disabled>${svg('door')} Haustür öffnen · Alarm ist scharf</button></div>`;
     if (this._doorSent && Date.now() - this._doorSent < 6000) return `<div class="cf">Haustür wird geöffnet …</div>`;
     if (this._doorAsk) return `<div class="cf">Haustür wirklich öffnen?<button class="y" data-door-yes>Ja, öffnen</button><button data-door-no>Abbrechen</button></div>`;
     return `<div class="ab one"><button class="door" data-door>${svg('door')} Haustür öffnen</button></div>`;
@@ -1118,11 +1120,11 @@ class ZuhauseCard extends HTMLElement {
     let html;
     if (!can && armed === null) {
       html = `<div class="alarm"><div class="st">${svg('shield')}<div><b>Alarmanlage</b><span>noch nicht mit Home Assistant verbunden</span></div></div>
-        <div class="ab"><button disabled>Scharf schalten</button><button class="off" disabled>Unscharf</button></div>${this._doorHtml()}</div>`;
+        <div class="ab"><button disabled>Scharf schalten</button><button class="off" disabled>Unscharf</button></div>${this._doorHtml(armed)}</div>`;
     } else {
       const ask = this._armAsk ? `<div class="cf">${this._armAsk === 'on' ? 'Wirklich scharf schalten?' : 'Wirklich unscharf schalten?'}<button class="y" data-arm-yes>Ja</button><button data-arm-no>Abbrechen</button></div>` : '';
       html = `<div class="alarm ${armed ? 'on' : ''}"><div class="st">${svg(armed ? 'lock' : 'shield')}<div><b>Alarmanlage ${armed === null ? '' : armed ? 'scharf' : 'unscharf'}</b><span>${this._alarmSub(a, armed)}</span></div></div>
-        <div class="ab"><button data-arm="on" ${armed ? 'disabled' : ''}>Scharf schalten</button><button class="off" data-arm="off" ${armed === false ? 'disabled' : ''}>Unscharf</button></div>${ask}${this._doorHtml()}</div>`;
+        <div class="ab"><button data-arm="on" ${armed ? 'disabled' : ''}>Scharf schalten</button><button class="off" data-arm="off" ${armed === false ? 'disabled' : ''}>Unscharf</button></div>${ask}${this._doorHtml(armed)}</div>`;
     }
     if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; }
   }
