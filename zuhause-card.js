@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.7.0';
+const VERSION = '2.7.1';
 
 const DEFAULTS = {
   name: '',
@@ -338,7 +338,7 @@ class ZuhauseCard extends HTMLElement {
 
     root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="grid">
       <section class="card hero"><span class="ver">v${VERSION}${window.__zuhauseSrc === 'lokal' ? ' · lokal' : ''}</span>
-        <div><h1><span data-k="greet">Hallo</span>,<br><em>${c.name}.</em></h1>
+        <div><h1><span data-k="greet">Hallo</span>,<br><em><span data-k="uname">${c.name}</span>.</em></h1>
           <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
           <div class="chips"><span class="chip" data-k="chOpen"></span><span class="chip" data-k="chLights"></span></div></div>
         <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
@@ -1055,6 +1055,8 @@ class ZuhauseCard extends HTMLElement {
     const c = this._cfg, k = this._k;
     const h = new Date().getHours();
     this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
+    // Begrüßung mit dem Namen des angemeldeten Benutzers
+    this._set('uname', (this._hass.user && this._hass.user.name) || c.name);
 
     // Wetter jetzt
     const w = this._s(c.weather);
