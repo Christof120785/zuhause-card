@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.8.0';
+const VERSION = '2.9.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -64,6 +64,7 @@ const IC = {
   heat: '<path d="M12 3v11M9 6h6M9 9h6"/><circle cx="12" cy="17" r="3"/>',
   plug: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  door: '<path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M4 21h16"/><circle cx="14.5" cy="12" r="1"/>',
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k] || ''}</svg>`;
@@ -273,6 +274,9 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .ab button{all:unset;cursor:pointer;text-align:center;border-radius:10px;padding:8px;font-weight:700;font-size:12.5px;color:#fff;background:#c83a3a}
 .ab button.off{background:var(--ok)}
 .ab button[disabled]{opacity:.4;cursor:default}
+.ab.one{grid-template-columns:1fr}.alarm .ab.one{grid-column:1/-1}
+.ab button.door{background:rgba(255,255,255,.14);display:flex;gap:6px;justify-content:center;align-items:center}
+.ab button.door svg{width:15px;height:15px}
 .cf{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;font-weight:600}
 .cf button{all:unset;cursor:pointer;border-radius:9px;padding:6px 11px;font-weight:700;background:var(--card)}
 .cf .y{background:#c83a3a;color:#fff}
@@ -966,9 +970,33 @@ class ZuhauseCard extends HTMLElement {
       return true;
     }
     if (d.arm) { this._armAsk = d.arm; this._renderAlarm(); return true; }
+    if (d.door !== undefined) { this._doorAsk = true; this._renderAlarm(); return true; }
+    if (d.doorNo !== undefined) { this._doorAsk = false; this._renderAlarm(); return true; }
+    if (d.doorYes !== undefined) {
+      const id = this._doorEnt();
+      if (id) h.callService('button', 'press', { entity_id: id });
+      this._doorAsk = false; this._doorSent = Date.now(); this._renderAlarm();
+      setTimeout(() => this._renderAlarm(), 6500);
+      return true;
+    }
     if (d.armNo !== undefined) { this._armAsk = null; this._renderAlarm(); return true; }
     if (d.armYes !== undefined) { this._doArm(this._armAsk === 'on'); this._armAsk = null; this._renderAlarm(); return true; }
     return false;
+  }
+
+  // ---------- Haustür öffnen (Programm "HT" der Zentrale) ----------
+  _doorEnt() {
+    const c = this._cfg, st = this._hass.states;
+    if (c.door) return st[c.door] ? c.door : null;
+    const ids = Object.keys(st).filter(x => x.startsWith('button.'));
+    return ids.find(x => /_p_ht$/.test(x))
+      || ids.find(x => /^(p )?ht( (ö|oe)ffnen)?$|haust(ü|ue)r (auf|(ö|oe)ffnen)/i.test((st[x].attributes.friendly_name || '').trim())) || null;
+  }
+  _doorHtml() {
+    if (!this._doorEnt()) return '';
+    if (this._doorSent && Date.now() - this._doorSent < 6000) return `<div class="cf">Haustür wird geöffnet …</div>`;
+    if (this._doorAsk) return `<div class="cf">Haustür wirklich öffnen?<button class="y" data-door-yes>Ja, öffnen</button><button data-door-no>Abbrechen</button></div>`;
+    return `<div class="ab one"><button class="door" data-door>${svg('door')} Haustür öffnen</button></div>`;
   }
 
   // ---------- Alarmanlage ----------
@@ -1090,11 +1118,11 @@ class ZuhauseCard extends HTMLElement {
     let html;
     if (!can && armed === null) {
       html = `<div class="alarm"><div class="st">${svg('shield')}<div><b>Alarmanlage</b><span>noch nicht mit Home Assistant verbunden</span></div></div>
-        <div class="ab"><button disabled>Scharf schalten</button><button class="off" disabled>Unscharf</button></div></div>`;
+        <div class="ab"><button disabled>Scharf schalten</button><button class="off" disabled>Unscharf</button></div>${this._doorHtml()}</div>`;
     } else {
       const ask = this._armAsk ? `<div class="cf">${this._armAsk === 'on' ? 'Wirklich scharf schalten?' : 'Wirklich unscharf schalten?'}<button class="y" data-arm-yes>Ja</button><button data-arm-no>Abbrechen</button></div>` : '';
       html = `<div class="alarm ${armed ? 'on' : ''}"><div class="st">${svg(armed ? 'lock' : 'shield')}<div><b>Alarmanlage ${armed === null ? '' : armed ? 'scharf' : 'unscharf'}</b><span>${this._alarmSub(a, armed)}</span></div></div>
-        <div class="ab"><button data-arm="on" ${armed ? 'disabled' : ''}>Scharf schalten</button><button class="off" data-arm="off" ${armed === false ? 'disabled' : ''}>Unscharf</button></div>${ask}</div>`;
+        <div class="ab"><button data-arm="on" ${armed ? 'disabled' : ''}>Scharf schalten</button><button class="off" data-arm="off" ${armed === false ? 'disabled' : ''}>Unscharf</button></div>${ask}${this._doorHtml()}</div>`;
     }
     if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; }
   }
