@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.6.2';
+const VERSION = '2.7.0';
 
 const DEFAULTS = {
   name: '',
@@ -180,6 +180,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .scn{border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
 .scl{font-size:11px;color:var(--muted);margin-bottom:6px}
 .scw{display:flex;flex-wrap:wrap;gap:6px}
+.row+.scw,.row+input+.scw{margin:2px 0 10px 34px}
 .scb{all:unset;cursor:pointer;font-size:12px;font-weight:600;padding:6px 11px;border-radius:99px;background:var(--sun-soft);color:var(--sun)}
 .scb:focus-visible{outline:2px solid var(--grid);outline-offset:2px}
 .swg{display:grid;grid-template-columns:1fr 1fr;column-gap:14px}
@@ -629,10 +630,11 @@ class ZuhauseCard extends HTMLElement {
       const gs = r.light.filter(l => l.attributes.is_hue_group && (l.attributes.entity_id || []).length);
       r.light = r.light.filter(l => {
         const m = l.attributes.entity_id || [];
-        if (l.attributes.is_hue_group && /^(beide|alle)\b/i.test(l.attributes.friendly_name || '')) return false;
+        if (l.attributes.is_hue_group && /^(beide|alle)\b/i.test(l.attributes.friendly_name || '')) { r.allGrp = l; return false; }
         if (!l.attributes.is_hue_group || !m.length) return true;
         const sub = gs.filter(o => o !== l && (o.attributes.entity_id || []).every(x => m.includes(x)));
-        return sub.length < 2;
+        if (sub.length >= 2) { r.allGrp = l; return false; }
+        return true;
       });
       if (r.light.some(l => l.attributes.is_hue_group)) r.light = r.light.filter(l => l.attributes.is_hue_group || (h.entities[l.entity_id] || {}).platform !== 'hue');
     });
@@ -773,13 +775,25 @@ class ZuhauseCard extends HTMLElement {
     let h = '';
     const row = (ico, id, name, sub, ctl, extra = '') => `<div class="row" style="flex-wrap:wrap"><div class="ico">${svg(ico)}</div><div class="txt" data-more="${id}"><b>${name}</b><span>${sub}</span></div>${ctl}${extra}</div>`;
     const tg = s => `<button class="tg" role="switch" aria-label="${s.attributes.friendly_name}" aria-checked="${s.state === 'on'}" data-toggle="${(s._grp || [s.entity_id]).join(',')}"></button>`;
+    // Szenen je Hue-Gruppe: unter der passenden Lampe, Sammelgruppen-Szenen unter "Alle Lichter"
+    const gkey = x => (x || '').trim().toLowerCase();
+    const chips = list => list.length ? `<div class="scw">${list.map(s => `<button class="scb" type="button" data-scene="${s.entity_id}">${s.attributes.name || s.attributes.friendly_name}</button>`).join('')}</div>` : '';
+    const used = new Set();
+    const scOf = name => { const l = r.scene.filter(s => !used.has(s.entity_id) && gkey(s.attributes.group_name) === gkey(name)); l.forEach(s => used.add(s.entity_id)); return l; };
     if (r.light.length || r.sw.length) {
       h += '<div class="sect">Licht</div>';
+      const nl = r.light.length + r.sw.length;
+      if (nl > 1 || r.allGrp) {
+        const any = [...r.light, ...r.sw].some(x => x.state === 'on');
+        h += `<div class="row"><div class="ico">${svg('bulb')}</div><div class="txt"><b>Alle Lichter</b><span>${any ? 'mindestens eins an' : 'alle aus'}</span></div><button class="tg" role="switch" aria-label="Alle Lichter ${r.name}" aria-checked="${any}" data-allroom="${r.id}"></button></div>`;
+        if (r.allGrp) h += chips(scOf(r.allGrp.attributes.friendly_name));
+      }
       r.light.forEach(s => {
         const p = this._pct(s), dimm = (s.attributes.supported_color_modes || []).some(m => m !== 'onoff');
         const sub = s.state === 'on' ? (p != null ? `An · ${p} %` : 'An') : s.state === 'off' ? 'Aus' : 'nicht erreichbar';
         h += row('bulb', s.entity_id, this._nm(s, r), sub, tg(s),
           dimm && s.state === 'on' ? `<input type="range" class="dim" min="1" max="100" value="${p || 100}" data-dim="${s.entity_id}" aria-label="${this._nm(s, r)} dimmen">` : '');
+        if (s.attributes.is_hue_group) h += chips(scOf(s.attributes.friendly_name));
       });
       r.sw.forEach(s => { h += row('plug', s.entity_id, this._nm(s, r), s.state === 'on' ? 'An' : s.state === 'off' ? 'Aus' : 'nicht erreichbar', tg(s)); });
     }
@@ -794,7 +808,8 @@ class ZuhauseCard extends HTMLElement {
         }
       });
     }
-    if (r.scene.length) h += `<div class="sect">Szenen</div><div class="scw" style="margin-top:6px">${r.scene.map(s => `<button class="scb" type="button" data-scene="${s.entity_id}">${s.attributes.name || s.attributes.friendly_name}</button>`).join('')}</div>`;
+    const rest = r.scene.filter(s => !used.has(s.entity_id));
+    if (rest.length) h += `<div class="sect">Szenen</div>` + chips(rest);
     if (r.cover.length) {
       h += '<div class="sect">Jalousien</div>';
       r.cover.forEach(s => {
@@ -853,6 +868,15 @@ class ZuhauseCard extends HTMLElement {
     }
     if (d.vkey) { const [addr, ch] = d.vkey.split('|'); h.callService('homematicip_local', 'set_device_value', { device_address: addr, channel: +ch, parameter: 'PRESS_SHORT', value: 'true', value_type: 'boolean' }); t.textContent = 'Gedrückt'; return true; }
     if (d.hmvar) { this._toggleVar(d.hmvar); return true; }
+    if (d.allroom) {
+      const r = room(d.allroom); if (!r) return true;
+      const ids = [...r.light.map(x => x.entity_id), ...r.sw.flatMap(x => x._grp || [x.entity_id])];
+      const any = [...r.light, ...r.sw].some(x => x.state === 'on');
+      if (any) h.callService('homeassistant', 'turn_off', { entity_id: ids });
+      else if (r.allGrp) { h.callService('light', 'turn_on', { entity_id: r.allGrp.entity_id }); const o = r.sw.flatMap(x => x._grp ? [x._grp[0]] : [x.entity_id]); if (o.length) h.callService('homeassistant', 'turn_on', { entity_id: o }); }
+      else h.callService('homeassistant', 'turn_on', { entity_id: [...r.light.map(x => x.entity_id), ...r.sw.map(x => (x._grp || [x.entity_id])[0])] });
+      return true;
+    }
     if (d.arm) { this._armAsk = d.arm; this._renderAlarm(); return true; }
     if (d.armNo !== undefined) { this._armAsk = null; this._renderAlarm(); return true; }
     if (d.armYes !== undefined) { this._doArm(this._armAsk === 'on'); this._armAsk = null; this._renderAlarm(); return true; }
