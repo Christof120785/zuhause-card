@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.9.1';
+const VERSION = '2.9.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -956,8 +956,11 @@ class ZuhauseCard extends HTMLElement {
     if (d.door !== undefined) { if (this._armed(this._alarmEnt()) !== true) this._doorAsk = true; this._renderAlarm(); return true; }
     if (d.doorNo !== undefined) { this._doorAsk = false; this._renderAlarm(); return true; }
     if (d.doorYes !== undefined) {
-      const id = this._doorEnt();
-      if (id && this._armed(this._alarmEnt()) !== true) h.callService('button', 'press', { entity_id: id });
+      const key = this._doorKey(), id = this._doorEnt();
+      if (this._armed(this._alarmEnt()) !== true) {
+        if (key) h.callService('homematicip_local', 'set_device_value', { device_address: key.addr, channel: key.ch, parameter: 'PRESS_SHORT', value: 'true', value_type: 'boolean' });
+        else if (id) h.callService('button', 'press', { entity_id: id });
+      }
       this._doorAsk = false; this._doorSent = Date.now(); this._renderAlarm();
       setTimeout(() => this._renderAlarm(), 6500);
       return true;
@@ -968,6 +971,22 @@ class ZuhauseCard extends HTMLElement {
   }
 
   // ---------- Haustür öffnen (Programm "HT" der Zentrale) ----------
+  // Virtuelle Taste "HT 1" der Fernbedienung (wie bei der Alarmanlage), sonst das Programm "HT" als Schaltfläche
+  _doorKey() {
+    const h = this._hass, svc = h.services && h.services.homematicip_local;
+    if (!svc || !svc.set_device_value) return null;
+    for (const s of Object.values(h.states)) {
+      if (!s.entity_id.startsWith('event.')) continue;
+      const e = h.entities && h.entities[s.entity_id], d = e && e.device_id && h.devices && h.devices[e.device_id];
+      if (!d || !/RCV-50/i.test(d.model || '')) continue;
+      const n = (s.attributes.friendly_name || '').replace(d.name_by_user || d.name || '', '').trim();
+      if (!/^ht( \d+)?$/i.test(n)) continue;
+      const a = s.attributes, ca = String(a.channel_address || a.address || '');
+      const ch = +(ca.split(':')[1] || (s.entity_id.match(/_ch(\d+)/) || [])[1] || (n.match(/(\d+)$/) || [])[1] || 0) || null;
+      if (ch) return { addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch };
+    }
+    return null;
+  }
   _doorEnt() {
     const c = this._cfg, st = this._hass.states;
     if (c.door) return st[c.door] ? c.door : null;
@@ -976,7 +995,7 @@ class ZuhauseCard extends HTMLElement {
       || ids.find(x => /^(p )?ht( (ö|oe)ffnen)?$|haust(ü|ue)r (auf|(ö|oe)ffnen)/i.test((st[x].attributes.friendly_name || '').trim())) || null;
   }
   _doorHtml(armed) {
-    if (!this._doorEnt()) return '';
+    if (!this._doorKey() && !this._doorEnt()) return '';
     // bei scharfer Alarmanlage nicht öffnen
     if (armed) return `<div class="ab one"><button class="door" disabled>${svg('door')} Haustür öffnen · Alarm ist scharf</button></div>`;
     if (this._doorSent && Date.now() - this._doorSent < 6000) return `<div class="cf">Haustür wird geöffnet …</div>`;
