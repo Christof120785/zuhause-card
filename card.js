@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 
 const DEFAULTS = {
   name: '',
@@ -474,12 +474,13 @@ class ZuhauseCard extends HTMLElement {
   }
 
   // ---------- Räume aus den Bereichen ----------
+  // false = nicht anzeigen, null = kein Bereich zugeordnet
   _areaOf(id) {
     const h = this._hass, e = h.entities && h.entities[id];
-    if (!e || e.hidden || e.entity_category) return null;
+    if (!e || e.hidden || e.entity_category) return false;
     if (e.area_id) return e.area_id;
     const d = e.device_id && h.devices && h.devices[e.device_id];
-    return d ? d.area_id : null;
+    return (d && d.area_id) || null;
   }
   _rooms() {
     const h = this._hass, st = h.states, areas = h.areas || {};
@@ -489,21 +490,40 @@ class ZuhauseCard extends HTMLElement {
     // Lichter, die schon in einer Hue-Gruppe stecken, nicht einzeln zeigen
     const inGroup = new Set();
     all.forEach(s => { if (s.entity_id.startsWith('light.') && s.attributes.is_hue_group) (s.attributes.entity_id || []).forEach(x => inGroup.add(x)); });
+    const nrm = x => (x || '').toLowerCase().replace(/ß/g, 'ss').replace(/[^a-zäöü0-9]/g, '');
+    const areaList = Object.values(areas).filter(x => nrm(x.name).length >= 4).sort((x, y) => nrm(y.name).length - nrm(x.name).length);
+    // Schalter nur von Geräte-Integrationen (keine Auto-, Wallbox- oder Kamera-Einstellungen)
+    const swOk = s => {
+      const pf = (h.entities[s.entity_id] || {}).platform || '';
+      return /homematic|hue|shelly|tasmota|esphome|zha|zwave|mqtt|tplink|tuya|deconz|tradfri|template|group/.test(pf)
+        && !/sirene|alarm/i.test(s.attributes.friendly_name || s.entity_id);
+    };
     all.forEach(s => {
       const id = s.entity_id, dom = id.split('.')[0];
       if (!['light', 'cover', 'climate', 'switch'].includes(dom)) return;
-      const a = this._areaOf(id); if (!a) return;
+      let a = this._areaOf(id); if (a === false) return;
+      // ohne Bereich: über den Namen zuordnen ("Wandthermostat Wohnzimmer 1" -> Wohnzimmer)
+      if (!a) { const n = nrm(s.attributes.friendly_name); const m = areaList.find(x => n.includes(nrm(x.name))); if (!m) return; a = m.area_id; }
       if (dom === 'light') { if (!inGroup.has(id)) add(a, 'light', s); }
-      else if (dom === 'switch') { if (!/sirene|alarm/i.test(s.attributes.friendly_name || id)) add(a, 'sw', s); }
+      else if (dom === 'switch') { if (swOk(s)) add(a, 'sw', s); }
       else add(a, dom, s);
     });
     // Bereiche zusammenlegen: selbst gewählt (Anordnen) oder automatisch,
     // wenn ein Name den anderen enthält ("Wohnzimmer klein" -> "Wohnzimmer")
     const merge = (this._lay && this._lay.merge) || {};
     const norm = x => x.toLowerCase().replace(/[^a-zäöüß]/g, '');
+    const OUT = /au(ss|ß)en|terr?asse|garten(?!haus)|carport|einfahrt|vordemhaus|weihnacht|lichterkette|hof|balkon|stern/;
+    const syn = { arbeitszimmer: 'büro', office: 'büro', wc: 'gästewc' };
+    if (Object.keys(by).some(a => OUT.test(norm(by[a].name)) && merge[a] === undefined))
+      by.__aussen = by.__aussen || { id: '__aussen', name: 'Außen', light: [], cover: [], climate: [], sw: [], scene: [] };
     const auto = a => {
       const n = norm(by[a].name);
-      const c = Object.values(by).filter(b => b.id !== a && norm(b.name).length >= 4 && n !== norm(b.name) && n.includes(norm(b.name)));
+      if (a === '__aussen') return '';
+      if (OUT.test(n) && by.__aussen) return '__aussen';
+      const sy = syn[n] && Object.values(by).find(b => norm(b.name) === syn[n]);
+      if (sy) return sy.id;
+      const c = Object.values(by).filter(b => b.id !== a && b.id !== '__aussen' && norm(b.name).length >= 4 && n.includes(norm(b.name))
+        && (n !== norm(b.name) || by[a].name.length > b.name.length));
       c.sort((x, y) => norm(y.name).length - norm(x.name).length);
       return c.length ? c[0].id : '';
     };
@@ -528,15 +548,30 @@ class ZuhauseCard extends HTMLElement {
       r.light.sort((x, y) => (y.attributes.is_hue_group ? 1 : 0) - (x.attributes.is_hue_group ? 1 : 0) || byName(x, y));
       r.cover.sort(byName); r.sw.sort(byName);
     });
-    // Hat ein Raum eine Hue-Gruppe, die einzelnen Hue-Lampen weglassen
+    // Hat ein Raum eine Hue-Gruppe, die einzelnen Hue-Lampen weglassen.
+    // Sammelgruppen ("Beide Wohnzimmer"), die nur andere Gruppen doppeln, ebenfalls.
+    Object.values(by).forEach(r => {
+      const gs = r.light.filter(l => l.attributes.is_hue_group && (l.attributes.entity_id || []).length);
+      r.light = r.light.filter(l => {
+        const m = l.attributes.entity_id || [];
+        if (l.attributes.is_hue_group && /^(beide|alle)\b/i.test(l.attributes.friendly_name || '')) return false;
+        if (!l.attributes.is_hue_group || !m.length) return true;
+        const sub = gs.filter(o => o !== l && (o.attributes.entity_id || []).every(x => m.includes(x)));
+        return sub.length < 2;
+      });
+      if (r.light.some(l => l.attributes.is_hue_group)) r.light = r.light.filter(l => l.attributes.is_hue_group || (h.entities[l.entity_id] || {}).platform !== 'hue');
+    });
     Object.values(by).forEach(r => {
       if (r.light.some(l => l.attributes.is_hue_group)) r.light = r.light.filter(l => l.attributes.is_hue_group || (h.entities[l.entity_id] || {}).platform !== 'hue');
     });
-    const list = Object.values(by);
+    // leere Bereiche (nichts zu schalten) weglassen
+    const list = Object.values(by).filter(r => r.light.length || r.cover.length || r.climate.length || r.sw.length);
     const order = (this._lay && this._lay.order) || [];
+    const RANK = [/wohnzimmer|wohnen/, /ess/, /küche|kueche/, /flur|diele|eingang/, /büro|buero|arbeit/, /schlaf/, /kind/, /bad|dusche/, /gäste|gaeste|wc/, /keller|technik/, /gartenhaus|hütte|huette/, /pool/, /außen|aussen/];
+    const rank = r => { const n = r.name.toLowerCase(); const i = RANK.findIndex(re => re.test(n)); return i < 0 ? 50 : i; };
     list.sort((x, y) => {
       const i = order.indexOf(x.id), j = order.indexOf(y.id);
-      if (i < 0 && j < 0) return x.name.localeCompare(y.name);
+      if (i < 0 && j < 0) return rank(x) - rank(y) || x.name.localeCompare(y.name);
       return (i < 0 ? 1e3 : i) - (j < 0 ? 1e3 : j);
     });
     return list;
