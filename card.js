@@ -1,0 +1,944 @@
+// Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
+// Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
+// Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
+// Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
+const VERSION = '2.0.0';
+
+const DEFAULTS = {
+  name: '',
+  images: '/local/dashboard/',
+  weather: '', pv: '', grid_in: '', grid_out: '',
+  wallbox: '', wallbox_release: '', car_soc: '', car_power: '',
+  batteries: [], contacts: [], rooms: [], switches: [], scene_rooms: [], cameras: [],
+};
+
+const IC = {
+  sofa: '<path d="M4 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3M3 11h18v6H3zM5 17v2M19 17v2"/>',
+  bed: '<path d="M3 18V7M3 13h18v5M21 18v-5a3 3 0 0 0-3-3h-7v3"/>',
+  desk: '<path d="M3 8h18M5 8v12M19 8v12M14 8v6h5"/>',
+  bath: '<path d="M3 12h18v3a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5zM6 12V5a2 2 0 0 1 4 0"/>',
+  kid: '<circle cx="12" cy="7" r="3"/><path d="M6 21v-4a6 6 0 0 1 12 0v4"/>',
+  lamp: '<path d="M8 3h8l3 8H5zM12 11v10M8 21h8"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>',
+  shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  cam: '<path d="M3 7h12v10H3zM15 10l6-3v10l-6-3z"/>',
+  blind: '<path d="M4 4h16M5 4v12h14V4M5 8h14M5 12h14M12 16v4"/>',
+  heat: '<path d="M12 3v11M9 6h6M9 9h6"/><circle cx="12" cy="17" r="3"/>',
+  plug: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+};
+const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k] || ''}</svg>`;
+const de = (v, d = 1) => Number(v).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const WX = { 'clear-night': 'Klar', cloudy: 'Bewölkt', fog: 'Nebel', hail: 'Hagel', lightning: 'Gewitter', 'lightning-rainy': 'Gewitter', partlycloudy: 'Teils bewölkt', pouring: 'Starkregen', rainy: 'Regen', snowy: 'Schnee', 'snowy-rainy': 'Schneeregen', sunny: 'Sonnig', windy: 'Windig', 'windy-variant': 'Windig', exceptional: 'Unwetter' };
+function lev(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 9;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+function wxIcon(c) {
+  const sun = '<circle cx="16" cy="16" r="6" fill="var(--sun)"/>';
+  const cl = '<path d="M9 25h14a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2A4 4 0 0 0 9 25z" fill="var(--faint)"/>';
+  const rn = '<g stroke="var(--grid)" stroke-width="2" stroke-linecap="round"><path d="M12 28l-1 3M17 28l-1 3M22 28l-1 3"/></g>';
+  let g = cl;
+  if (c === 'sunny' || c === 'clear-night') g = sun;
+  else if (c === 'partlycloudy') g = '<circle cx="12" cy="12" r="5" fill="var(--sun)"/>' + cl;
+  else if (/rain|pouring|lightning|hail|snow/.test(c || '')) g = cl + rn;
+  return `<svg viewBox="0 0 32 34" aria-hidden="true">${g}</svg>`;
+}
+
+const CSS = `
+:host{
+  --bg:#e9edf3; --card:#ffffff; --tile:#f3f5f8; --line:#e3e7ee;
+  --fg:#1b2430; --muted:#6b7684; --faint:#9aa3ae;
+  --hero:#1e2b3a; --hero-fg:#f2f5f8; --hero-mut:#a9b6c3;
+  --sun:#d99a1c; --sun-soft:#fbf3dc; --batt:#3c9a64; --batt-soft:#e3f2e8;
+  --grid:#6c63c9; --grid-soft:#ebe9f8; --house:#3f5163; --house-soft:#eaeef3;
+  --ok:#3c9a64; --warn:#c8641f; --warn-soft:#fbe9dc; --pic:#f4f5f7;
+  --display:"Sora",system-ui,sans-serif; --body:"DM Sans",system-ui,sans-serif;
+  display:block;
+}
+:host(.dark){
+  --bg:#10161d; --card:#1a222c; --tile:#222c37; --line:#2b3642;
+  --fg:#e9eef3; --muted:#9eabb8; --faint:#6f7c89;
+  --hero:#0b1118; --hero-mut:#93a1ae;
+  --sun:#efb544; --sun-soft:#3a2f17; --batt:#62c48b; --batt-soft:#173327;
+  --grid:#9d95ef; --grid-soft:#26244a; --house:#b9c6d2; --house-soft:#26313d;
+  --ok:#62c48b; --warn:#ef8a4a; --warn-soft:#3a2416; --pic:#e9ebee;
+}
+*{box-sizing:border-box}
+.wrap{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.35;padding:12px;min-height:100vh}
+.grid{display:grid;gap:12px;grid-template-columns:1fr}
+@media(min-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero,.wide{grid-column:1/-1}}
+@media(min-width:1100px){.grid{grid-template-columns:repeat(12,minmax(0,1fr))}
+  .hero{grid-column:span 12}.energy{grid-column:span 5}.store{grid-column:span 3}.wb{grid-column:span 4}
+  .sec{grid-column:span 4}.home{grid-column:span 8}
+  .cams{grid-column:span 4}.wx{grid-column:span 4}.hints{grid-column:span 4}.hist{grid-column:span 12}}
+@media(min-width:700px) and (max-width:1099px){.home{grid-column:1/-1}}
+.card{background:var(--card);border-radius:20px;padding:14px 16px;min-width:0;box-shadow:0 1px 2px rgba(20,30,50,.05)}
+.eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.eyebrow span:last-child{letter-spacing:.02em;text-transform:none;color:var(--muted)}
+h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
+.sub{font-size:12px;color:var(--muted);margin:0 0 10px}
+.num{font-variant-numeric:tabular-nums}
+.pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--sun-soft);color:var(--sun);white-space:nowrap}
+.pill.off{background:var(--tile);color:var(--muted)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.info{background:var(--grid-soft);color:var(--grid)}
+/* hero */
+.hero{position:relative;background:var(--hero);color:var(--hero-fg);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.ver{position:absolute;top:6px;right:12px;font-size:9px;color:var(--hero-mut);opacity:.6;letter-spacing:.04em}
+.hero h1{font-family:var(--display);font-size:26px;line-height:1.1;margin:0;font-weight:700;letter-spacing:-.02em}
+.hero h1 em{font-style:normal;color:#b9e3c8}
+.hero p{color:var(--hero-mut);font-size:12.5px;margin:4px 0 10px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid rgba(255,255,255,.18);border-radius:99px;padding:4px 11px;font-size:12px}
+.wxn{text-align:right}
+.wxn .t{font-family:var(--display);font-size:30px;font-weight:600}
+.wxn .t small{font-size:14px;color:var(--hero-mut)}
+.wxn div{font-size:12px;color:var(--hero-mut)}
+/* energy */
+.scene{width:100%;height:auto;display:block;margin:0 0 6px}
+.dash{stroke-dasharray:4 6;animation:fl 1.4s linear infinite}
+.dash.idle{animation:none;opacity:.3}
+.dash.rev{animation-direction:reverse}
+@keyframes fl{to{stroke-dashoffset:-20}}
+@media(prefers-reduced-motion:reduce){.dash{animation:none}}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media(max-width:420px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{border-radius:14px;padding:10px;background:var(--tile);min-width:0}
+.tile .l{font-size:11px;color:var(--muted)}
+.tile .v{font-family:var(--display);font-size:19px;font-weight:600;margin-top:2px;white-space:nowrap}
+.tile .v small{font-size:11px;color:var(--muted);font-weight:500;margin-left:2px}
+.tile .s{font-size:11px;color:var(--muted)}
+.t-sun{background:var(--sun-soft)}.t-house{background:var(--house-soft)}.t-grid{background:var(--grid-soft)}.t-batt{background:var(--batt-soft)}
+.foot{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:10px;gap:8px;flex-wrap:wrap}
+/* pictures */
+.pic{background:var(--pic);border-radius:14px;display:grid;place-items:center;overflow:hidden}
+.pic img{display:block;max-width:100%;height:auto;mix-blend-mode:multiply}
+.batpic{margin-bottom:8px;min-height:60px}.batpic img{width:60%}
+.ph{color:#8a96a2;font-size:12px;padding:16px;text-align:center}
+.bat{padding:8px 0;border-top:1px solid var(--line)}
+.bl{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bs{font-size:12px;color:var(--muted)}
+.prog{height:8px;background:var(--tile);border-radius:99px;overflow:hidden;margin:5px 0}
+.prog i{display:block;height:100%;border-radius:99px;background:var(--batt)}
+/* wallbox */
+.wbpics{display:grid;grid-template-columns:3fr 1fr;gap:8px;margin:4px 0 8px}
+.carpic img{width:86%}.wbpic img{width:80%}
+.wbt{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+/* security */
+.shield{width:64px;height:64px;border-radius:50%;background:var(--batt-soft);color:var(--ok);display:grid;place-items:center;margin:4px auto}
+.shield svg{width:30px;height:30px}
+.shield.alert{background:var(--warn-soft);color:var(--warn)}
+.center{text-align:center}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);margin:8px 0;text-align:center}
+.stats div+div{border-left:1px solid var(--line)}
+.stats b{font-family:var(--display);font-size:20px;display:block}
+.stats span{font-size:11px;color:var(--muted)}
+.row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.row:first-of-type{border-top:0}
+.row .txt{flex:1;min-width:0}
+.row .txt b{font-weight:600;display:block}
+.row .txt span{font-size:11.5px;color:var(--muted)}
+/* rooms */
+.rooms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media(max-width:420px){.rooms{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.room{background:var(--tile);border-radius:14px;padding:10px;cursor:pointer}
+.room .l{font-size:11.5px;color:var(--muted);margin-top:6px}
+.room .v{font-family:var(--display);font-size:20px;font-weight:600}
+.room .v small{font-size:11px;color:var(--muted)}
+.room .h{font-size:11px;color:var(--faint)}
+.ico{width:26px;height:26px;border-radius:8px;background:var(--card);display:grid;place-items:center;color:var(--muted);flex:none}
+.ico svg{width:15px;height:15px}
+/* switches */
+.tg{all:unset;cursor:pointer;width:40px;height:23px;border-radius:99px;background:var(--line);position:relative;flex:none;transition:background .2s}
+.tg::after{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .2s}
+.tg[aria-checked="true"]{background:var(--sun)}
+.tg[aria-checked="true"]::after{transform:translateX(17px)}
+.tg:focus-visible,.btn:focus-visible{outline:2px solid var(--grid);outline-offset:2px}
+.stats.two{grid-template-columns:repeat(2,1fr)}
+.dim{display:block;width:100%;margin:4px 0 0;accent-color:var(--sun)}
+.dim[hidden]{display:none}
+.row .txt[data-more]{cursor:pointer}
+.scn{border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
+.scl{font-size:11px;color:var(--muted);margin-bottom:6px}
+.scw{display:flex;flex-wrap:wrap;gap:6px}
+.scb{all:unset;cursor:pointer;font-size:12px;font-weight:600;padding:6px 11px;border-radius:99px;background:var(--sun-soft);color:var(--sun)}
+.scb:focus-visible{outline:2px solid var(--grid);outline-offset:2px}
+.swg{display:grid;grid-template-columns:1fr 1fr;column-gap:14px}
+.swg .row:nth-child(2){border-top:0}
+/* Räume */
+.hhead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.arr{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px;font-weight:600}
+.arr[aria-pressed="true"]{background:var(--hero);color:var(--hero-fg);border-color:var(--hero)}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.qb{all:unset;cursor:pointer;display:flex;gap:6px;align-items:center;background:var(--tile);border-radius:10px;padding:7px 10px;font-size:12px;font-weight:600}
+.qb svg{width:15px;height:15px}
+.qb.on{background:var(--warn);color:#fff}
+.rg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;grid-auto-flow:row dense}
+@media(min-width:560px){.rg{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:1400px){.rg{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.rt{box-sizing:border-box;cursor:pointer;background:var(--tile);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:4px;position:relative;min-width:0}
+.rt[aria-expanded="true"]{outline:2px solid var(--hero)}
+.rt.hid{opacity:.4}
+.rt b{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rt .v{font-family:var(--display);font-size:19px;font-weight:600}
+.rt .v small{font-size:11px;color:var(--muted)}
+.rt .m{display:flex;gap:4px;flex-wrap:wrap}
+.rt .pill{font-size:10.5px;padding:2px 7px}
+.rt .pill.off{background:var(--card)}
+.mv{display:flex;gap:4px;margin-top:4px}
+.mv button{all:unset;cursor:pointer;width:28px;height:28px;border-radius:8px;background:var(--card);display:grid;place-items:center;font-weight:700}
+.mv svg{width:15px;height:15px}
+.rp{grid-column:1/-1;border:1px solid var(--line);border-radius:14px;padding:8px 12px 12px}
+.sect{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:10px 0 0}
+.pos{display:block;width:100%;margin:4px 0 0;accent-color:#3d7fb8}
+.cb{display:flex;gap:4px;flex:none}
+.cb button,.bst{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:9px;padding:5px 9px;font-size:12px;font-weight:600}
+.bst.on{background:var(--warn);color:#fff;border-color:var(--warn)}
+.hint{font-size:12px;background:var(--grid-soft);color:var(--grid);border-radius:10px;padding:8px 10px;margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint input{width:56px;font:inherit;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+/* Alarmanlage */
+.alarm{border-radius:14px;padding:10px 12px;background:var(--batt-soft);margin:6px 0 10px;display:grid;gap:8px}
+.alarm.on{background:var(--warn-soft)}
+.alarm .st{display:flex;gap:10px;align-items:center}
+.alarm .st svg{width:22px;height:22px;color:var(--ok)}
+.alarm.on .st svg{color:var(--warn)}
+.alarm b{font-family:var(--display);font-size:14.5px;display:block}
+.alarm span{font-size:11.5px;color:var(--muted)}
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ab button{all:unset;cursor:pointer;text-align:center;border-radius:10px;padding:8px;font-weight:700;font-size:12.5px;color:#fff;background:#c83a3a}
+.ab button.off{background:var(--ok)}
+.ab button[disabled]{opacity:.4;cursor:default}
+.cf{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;font-weight:600}
+.cf button{all:unset;cursor:pointer;border-radius:9px;padding:6px 11px;font-weight:700;background:var(--card)}
+.cf .y{background:#c83a3a;color:#fff}
+/* cameras */
+.camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
+.cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
+.cam .view{aspect-ratio:16/9;max-width:100%;position:relative;display:grid;place-items:center;background:var(--house-soft);color:var(--muted)}
+.cam .view img{width:100%;height:100%;object-fit:cover;display:block}
+.cam .view svg{width:28px;height:28px;opacity:.6}
+.cam .live{position:absolute;top:6px;left:6px;background:rgba(200,30,30,.9);color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:5px}
+.cam .meta{padding:6px 9px;display:flex;justify-content:space-between;gap:6px;align-items:center;font-size:12.5px}
+.cam .meta span{font-size:11px;color:var(--muted)}
+/* weather */
+.fc{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;text-align:center}
+.fc div{background:var(--tile);border-radius:12px;padding:6px 2px;font-size:11.5px}
+.fc b{display:block;font-size:12.5px}
+.fc svg{width:24px;height:24px;display:block;margin:3px auto}
+/* history */
+.chart svg{width:100%;height:auto;display:block}
+.chart text{font-size:10px;fill:var(--faint);font-family:var(--body)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:4px}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:var(--c);vertical-align:-1px}
+.btn{all:unset;cursor:pointer;display:flex;justify-content:space-between;background:var(--batt-soft);color:var(--ok);border-radius:12px;padding:9px 12px;font-size:12.5px;font-weight:600}
+`;
+
+class ZuhauseCard extends HTMLElement {
+  setConfig(config) {
+    this._cfg = Object.assign({}, DEFAULTS, config || {});
+    // Kameras ohne Bild in Home Assistant (app: true) werden nicht angezeigt
+    this._cfg.cameras = (this._cfg.cameras || []).filter(m => !m.app);
+    this._built = false;
+  }
+  getCardSize() { return 20; }
+  getGridOptions() { return { columns: 'full' }; }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._lay) this._loadLayout();
+    this._cams = this._camList();
+    const sig = this._cams.map(m => m.id + '|' + m.name).join(',');
+    if (sig !== this._camSig) { this._camSig = sig; this._built = false; }
+    if (!this._built) this._build();
+    this.classList.toggle('dark', !!(hass.themes && hass.themes.darkMode));
+    this._update();
+    if (!this._fcSub && hass.connection && this._cfg.weather && hass.states[this._cfg.weather]) this._subForecast();
+    if (!this._histT || Date.now() - this._histT > 15 * 60 * 1000) { this._histT = Date.now(); this._loadHistory(); }
+  }
+
+  _s(id) { return id && this._hass.states[id]; }
+  _n(id) { const s = this._s(id); if (!s) return null; const v = parseFloat(s.state); return isNaN(v) ? null : v; }
+  // Leistung immer in kW, egal ob der Sensor W oder kW liefert
+  _kw(id) {
+    const s = this._s(id); const v = this._n(id); if (v === null) return null;
+    const u = (s.attributes.unit_of_measurement || 'W').toLowerCase();
+    return u === 'kw' ? v : u === 'mw' ? v * 1000 : v / 1000;
+  }
+
+  _build() {
+    if (!document.getElementById('zuhause-fonts')) {
+      const l = document.createElement('link');
+      l.id = 'zuhause-fonts'; l.rel = 'stylesheet';
+      l.href = 'https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap';
+      document.head.appendChild(l);
+    }
+    const c = this._cfg;
+    const root = this.shadowRoot || this.attachShadow({ mode: 'open' });
+    const bats = c.batteries.map((b, i) => `
+      <div class="bat"><div class="bl"><b>${b.name}</b><span data-k="bsoc${i}" class="num"></span></div>
+      <div class="prog"><i data-k="bbar${i}" style="width:0"></i></div><div class="bs" data-k="bsub${i}"></div></div>`).join('');
+    const firstPic = c.batteries.find(b => b.img);
+    const cams = this._cams.map((m, i) => `<div class="cam" data-cam="${i}"><div class="view" data-k="cv${i}">${svg('cam')}</div>
+      <div class="meta"><b>${m.name}</b><span data-k="cs${i}">${m.brand}</span></div></div>`).join('');
+    const contacts = c.contacts.map((k, i) => `<div class="row"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span></div>`).join('');
+
+    root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="grid">
+      <section class="card hero"><span class="ver">v${VERSION}${window.__zuhauseSrc === 'lokal' ? ' · lokal' : ''}</span>
+        <div><h1><span data-k="greet">Hallo</span>,<br><em>${c.name}.</em></h1>
+          <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
+          <div class="chips"><span class="chip" data-k="chOpen"></span><span class="chip" data-k="chLights"></span></div></div>
+        <div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
+      </section>
+
+      <section class="card energy">
+        <div class="eyebrow"><span>Energie</span><span>● Live</span></div>
+        <h2>Dein Energiefluss</h2><p class="sub" data-k="esub"></p>
+        <svg class="scene" viewBox="0 0 400 190" role="img" aria-label="Energiefluss">
+          <g fill="none" stroke-width="2" stroke-linecap="round">
+            <path data-k="lpv" class="dash" d="M70 58 C110 58 120 80 130 92" stroke="var(--sun)"/>
+            <path data-k="lgrid" class="dash" d="M288 112 C300 100 312 76 322 66" stroke="var(--grid)"/>
+            <path data-k="lbat" class="dash" d="M130 150 C115 160 105 158 100 154" stroke="var(--batt)"/>
+            <path data-k="lwb" class="dash" d="M288 150 C300 158 306 158 314 154" stroke="var(--house)"/>
+          </g>
+          <circle cx="55" cy="55" r="13" fill="var(--sun)"/>
+          <g stroke="var(--sun)" stroke-width="2" stroke-linecap="round"><path d="M55 32v6M55 72v6M32 55h6M72 55h6M39 39l4 4M67 67l4 4M39 71l4-4M67 43l4-4"/></g>
+          <text x="55" y="96" text-anchor="middle" font-size="10" fill="var(--muted)">Photovoltaik</text>
+          <defs><clipPath id="hc"><rect x="128" y="62" width="160" height="104" rx="14"/></clipPath></defs>
+          <image href="${c.images}haus.webp" x="128" y="62" width="160" height="104" preserveAspectRatio="xMidYMid slice" clip-path="url(#hc)"/>
+          <image href="${c.images}anker.webp" x="34" y="132" width="66" height="39"/>
+          <text x="67" y="182" text-anchor="middle" font-size="10" fill="var(--muted)">Speicher</text>
+          <rect x="320" y="38" width="32" height="32" rx="9" fill="var(--grid-soft)"/>
+          <path d="M336 44 l-7 20 M336 44 l7 20 M330 52 h12 M328 58 h16" stroke="var(--grid)" stroke-width="1.6" fill="none"/>
+          <text x="336" y="86" text-anchor="middle" font-size="10" fill="var(--muted)">Stromnetz</text>
+          <image href="${c.images}wallbox.webp" x="314" y="130" width="40" height="40"/>
+          <text x="334" y="182" text-anchor="middle" font-size="10" fill="var(--muted)">Wallbox</text>
+        </svg>
+        <div class="tiles">
+          <div class="tile t-sun" data-more="${c.pv}"><div class="l">Photovoltaik</div><div class="v num"><span data-k="vpv">–</span><small>kW</small></div><div class="s">SMA</div></div>
+          <div class="tile t-house"><div class="l">Hausverbrauch</div><div class="v num"><span data-k="vhouse">–</span><small>kW</small></div><div class="s">ohne Wallbox</div></div>
+          <div class="tile t-grid" data-more="${c.grid_in}"><div class="l">Netz</div><div class="v num"><span data-k="vgrid">–</span><small>kW</small></div><div class="s" data-k="sgrid"></div></div>
+          <div class="tile t-batt"><div class="l">Speicher</div><div class="v num"><span data-k="vbat">–</span><small>%</small></div><div class="s" data-k="sbat"></div></div>
+        </div>
+        <div class="foot"><span>Heute erzeugt <b class="num" data-k="today">–</b></span><span>Autarkie heute <b class="num" data-k="aut">–</b></span></div>
+      </section>
+
+      <section class="card store">
+        <div class="eyebrow"><span>Speicher</span><span>Anker · Marstek</span></div>
+        <h2>Deine Batterien</h2><p class="sub" data-k="bsub"></p>
+        <div class="pic batpic">${firstPic ? `<img src="${c.images}${firstPic.img}" alt="${firstPic.name}">` : ''}</div>
+        ${bats}
+      </section>
+
+      <section class="card wb">
+        <div class="eyebrow"><span>Wallbox</span><span>SMA EV Charger</span></div>
+        <h2 data-k="wbh">Wallbox</h2><p class="sub" data-k="wbs"></p>
+        <div class="wbpics"><div class="pic carpic"><img src="${c.images}auto.webp" alt="Auto"></div><div class="pic wbpic"><img src="${c.images}wallbox.webp" alt="Wallbox"></div></div>
+        <div class="foot" style="margin:0"><span>Akku Auto</span><span class="num" data-k="csoc">–</span></div>
+        <div class="prog"><i data-k="cbar" style="width:0;background:var(--grid)"></i></div>
+        <div class="wbt">
+          <div class="tile" data-more="${c.wallbox}"><div class="l">Ladeleistung</div><div class="v num"><span data-k="wbp">–</span><small>kW</small></div></div>
+          <div class="tile"><div class="l">Laden</div><div class="v" style="font-size:15px;margin-top:6px"><button class="tg" role="switch" aria-label="Laden freigeben" aria-checked="false" data-toggle="${c.wallbox_release}" data-k="wbr"></button></div></div>
+          <div class="tile"><div class="l">Heute geladen</div><div class="v num"><span data-k="wbtoday">–</span><small>kWh</small></div></div>
+        </div>
+      </section>
+
+      <section class="card sec">
+        <div class="eyebrow"><span>Sicherheit</span><span>Homematic</span></div>
+        <div class="center"><div class="shield" data-k="shield">${svg('shield')}</div>
+          <h2 data-k="sech">Alles im Blick</h2><p class="sub" data-k="secs"></p></div>
+        <div data-k="alarm"></div>
+        <div class="stats two"><div><b class="num" data-k="nopen">–</b><span>offen</span></div><div><b class="num" data-k="nclosed">–</b><span>geschlossen</span></div></div>
+        ${contacts}
+      </section>
+
+      <section class="card home">
+        <div class="hhead"><div><div class="eyebrow"><span>Räume</span></div>
+          <h2>Im Haus</h2><p class="sub">Antippen klappt Licht, Szenen, Jalousien und Heizung auf</p></div>
+          <button class="arr" data-arrange aria-pressed="false">↕ Anordnen</button></div>
+        <div class="quick" data-k="quick"></div>
+        <div data-k="ahint"></div>
+        <div class="rg" data-k="rooms"></div>
+      </section>
+
+      <section class="card cams">
+        <div class="eyebrow"><span>Kameras</span><span>${[...new Set(this._cams.map(m => m.brand).filter(Boolean))].join(' · ')}</span></div>
+        <h2>Rund ums Haus</h2><p class="sub">Antippen öffnet das Livebild</p>
+        <div class="camg">${cams}</div>
+      </section>
+
+      <section class="card wx">
+        <div class="eyebrow"><span>Wetter</span><span>Vorhersage</span></div>
+        <h2>Die nächsten Tage</h2><p class="sub" data-k="wxs"></p>
+        <div class="fc" data-k="fc"></div>
+      </section>
+
+      <section class="card hints">
+        <div class="eyebrow"><span>Hinweise</span><span>automatisch</span></div>
+        <h2>Das solltest du wissen</h2><p class="sub">Nur was gerade Aufmerksamkeit braucht</p>
+        <div data-k="hints"></div>
+      </section>
+
+      <section class="card hist chart">
+        <div class="eyebrow"><span>Energie</span><span>letzte 7 Tage</span></div>
+        <h2>Erzeugung und Verbrauch</h2><p class="sub">kWh pro Tag, aus deiner Energie-Konfiguration</p>
+        <div data-k="hist"></div>
+        <div class="legend"><span style="--c:var(--sun)">PV-Ertrag</span><span style="--c:var(--grid)">Netzbezug</span><span style="--c:var(--house)">Wallbox</span></div>
+      </section>
+    </div></div>`;
+
+    this._k = {};
+    root.querySelectorAll('[data-k]').forEach(e => { this._k[e.dataset.k] = e; });
+    // Während ein Slider bewegt wird, nicht neu zeichnen
+    root.addEventListener('pointerdown', e => { if (e.target.matches('input[type=range]')) this._busy = Date.now() + 60000; });
+    root.addEventListener('input', e => {
+      const t = e.target;
+      if (t.dataset.dim || t.dataset.pos) {
+        this._busy = Date.now() + 60000;
+        const s = t.closest('.row') && t.closest('.row').querySelector('.txt span');
+        if (s) s.textContent = t.dataset.dim ? `An · ${t.value} %` : this._posTxt(+t.value);
+      }
+    });
+    root.addEventListener('change', e => {
+      const t = e.target;
+      if (t.dataset.dim) this._hass.callService('light', 'turn_on', { entity_id: t.dataset.dim, brightness_pct: +t.value });
+      if (t.dataset.pos) this._hass.callService('cover', 'set_cover_position', { entity_id: t.dataset.pos, position: +t.value });
+      if (t.dataset.boostmin) { const v = Math.max(1, Math.min(240, +t.value || 30)); this._lay.boost_min = v; this._save(); }
+      if (t.dataset.dim || t.dataset.pos) this._busy = Date.now() + 1500;
+    });
+    root.addEventListener('click', e => {
+      if (e.target.closest('input')) return;
+      if (this._roomClick(e)) return;
+      const t = e.target.closest('[data-toggle]');
+      if (t) {
+        const id = t.dataset.toggle;
+        if (id && this._s(id)) this._hass.callService('homeassistant', 'toggle', { entity_id: id });
+        return;
+      }
+      const sc = e.target.closest('[data-scene]');
+      if (sc) { this._hass.callService('scene', 'turn_on', { entity_id: sc.dataset.scene }); return; }
+      const cam = e.target.closest('[data-cam]');
+      if (cam) {
+        const id = this._cams[+cam.dataset.cam].id;
+        if (!id) return;
+        this._more(id);
+        return;
+      }
+      const m = e.target.closest('[data-more]');
+      if (m && m.dataset.more) this._more(m.dataset.more);
+    });
+    root.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-room]')) { e.preventDefault(); e.target.click(); }
+    });
+    this._roomSig = null;
+    this._built = true;
+  }
+
+  // Kameras: feste ID oder Suche per Stichwort (find/Name). Angezeigt werden nur Kameras mit Livebild.
+  _camList() {
+    const st = this._hass.states;
+    const all = Object.keys(st).filter(id => id.startsWith('camera.')).sort();
+    return this._cfg.cameras.map(m => {
+      let id = m.entity && st[m.entity] ? m.entity : null;
+      if (!id) {
+        const f = this._key(m);
+        const ids = f ? all.filter(x => x.includes(f)) : [];
+        id = ids.find(x => !/clear|klar|snapshot/.test(x)) || ids[0] || null;
+      }
+      return Object.assign({}, m, { id });
+    }).filter(m => m.id && this._stream(m.id));
+  }
+
+  // ---------- Anordnung (gespeichert in Home Assistant, pro Benutzer) ----------
+  async _loadLayout() {
+    this._lay = { order: [], hidden: [], boost: {}, boost_min: 30 };
+    try {
+      const r = await this._hass.callWS({ type: 'frontend/get_user_data', key: 'zuhause-card' });
+      if (r && r.value) Object.assign(this._lay, r.value);
+    } catch (e) { /* ältere Versionen: Standard */ }
+    this._roomSig = null;
+    if (this._built) this._update();
+  }
+  _save() {
+    this._hass.callWS({ type: 'frontend/set_user_data', key: 'zuhause-card', value: this._lay }).catch(() => {});
+  }
+
+  // ---------- Räume aus den Bereichen ----------
+  _areaOf(id) {
+    const h = this._hass, e = h.entities && h.entities[id];
+    if (!e || e.hidden || e.entity_category) return null;
+    if (e.area_id) return e.area_id;
+    const d = e.device_id && h.devices && h.devices[e.device_id];
+    return d ? d.area_id : null;
+  }
+  _rooms() {
+    const h = this._hass, st = h.states, areas = h.areas || {};
+    const by = {};
+    const add = (a, kind, s) => { if (!a || !areas[a]) return; (by[a] = by[a] || { id: a, name: areas[a].name, light: [], cover: [], climate: [], sw: [], scene: [] })[kind].push(s); };
+    const all = Object.values(st);
+    // Lichter, die schon in einer Hue-Gruppe stecken, nicht einzeln zeigen
+    const inGroup = new Set();
+    all.forEach(s => { if (s.entity_id.startsWith('light.') && s.attributes.is_hue_group) (s.attributes.entity_id || []).forEach(x => inGroup.add(x)); });
+    all.forEach(s => {
+      const id = s.entity_id, dom = id.split('.')[0];
+      if (!['light', 'cover', 'climate', 'switch'].includes(dom)) return;
+      const a = this._areaOf(id); if (!a) return;
+      if (dom === 'light') { if (!inGroup.has(id)) add(a, 'light', s); }
+      else if (dom === 'switch') { if (!/sirene|alarm/i.test(s.attributes.friendly_name || id)) add(a, 'sw', s); }
+      else add(a, dom, s);
+    });
+    // Hue-Szenen: Gruppenname passt zum Bereich oder zu einer Hue-Gruppe im Bereich
+    const scenes = all.filter(s => s.entity_id.startsWith('scene.') && s.attributes.group_name);
+    Object.values(by).forEach(r => {
+      const names = new Set([r.name.toLowerCase(), ...r.light.filter(l => l.attributes.is_hue_group).map(l => (l.attributes.friendly_name || '').trim().toLowerCase())]);
+      r.scene = scenes.filter(s => names.has(s.attributes.group_name.trim().toLowerCase()))
+        .sort((x, y) => (x.attributes.name || x.entity_id).localeCompare(y.attributes.name || y.entity_id));
+      const byName = (x, y) => (x.attributes.friendly_name || '').localeCompare(y.attributes.friendly_name || '');
+      r.light.sort((x, y) => (y.attributes.is_hue_group ? 1 : 0) - (x.attributes.is_hue_group ? 1 : 0) || byName(x, y));
+      r.cover.sort(byName); r.sw.sort(byName);
+    });
+    // Hat ein Raum eine Hue-Gruppe, die einzelnen Hue-Lampen weglassen
+    Object.values(by).forEach(r => {
+      if (r.light.some(l => l.attributes.is_hue_group)) r.light = r.light.filter(l => l.attributes.is_hue_group || (h.entities[l.entity_id] || {}).platform !== 'hue');
+    });
+    const list = Object.values(by);
+    const order = (this._lay && this._lay.order) || [];
+    list.sort((x, y) => {
+      const i = order.indexOf(x.id), j = order.indexOf(y.id);
+      if (i < 0 && j < 0) return x.name.localeCompare(y.name);
+      return (i < 0 ? 1e3 : i) - (j < 0 ? 1e3 : j);
+    });
+    return list;
+  }
+
+  _nm(s, r) {
+    let n = (s.attributes.friendly_name || s.entity_id).trim().replace(/\s+/g, ' ');
+    const t = n.replace(/^(jalou?i?sie|wandthermostat|thermostat|stellantrieb)\s+/i, '');
+    if (t) n = t;
+    // Homematic doppelt "Gerät Kanal": "WohnzimmerGroß Wohnzimmer groß" -> "Wohnzimmer groß"
+    const w = n.split(' '), flat = x => x.join('').toLowerCase().replace(/[^a-zäöüß0-9]/g, '');
+    for (let i = 1; i < w.length; i++) {
+      const a = flat(w.slice(0, i)), b = flat(w.slice(i));
+      if (b.length > 3 && (a === b || a.endsWith(b) || lev(a, b) <= 2)) { n = w.slice(i).join(' '); break; }
+      if (a.length > 3 && b.endsWith(a)) { n = w.slice(0, i).join(' '); break; }
+    }
+    // Raumname vorne weglassen, wenn danach noch etwas übrig bleibt
+    if (r && n.toLowerCase().startsWith(r.name.toLowerCase() + ' ') && /[a-zäöü]{3}/i.test(n.slice(r.name.length + 1))) n = n.slice(r.name.length + 1);
+    return n;
+  }
+  _posTxt(v) { return v <= 0 ? 'Zu' : v >= 100 ? 'Auf' : `${v} %`; }
+  _pct(s) { return s.attributes.brightness != null ? Math.round(s.attributes.brightness / 2.55) : null; }
+  _boosting(s) { return s.attributes.preset_mode === 'boost'; }
+  _canBoost(s) { return (s.attributes.preset_modes || []).includes('boost'); }
+
+  // Boost-Restzeit: Start merkt sich die Karte, Dauer stellst du bei "Anordnen" ein
+  _boostInfo(list) {
+    const run = list.filter(x => this._boosting(x));
+    if (!run.length) return null;
+    const lay = this._lay || { boost: {}, boost_min: 30 };
+    let changed = false;
+    run.forEach(x => { if (!lay.boost[x.entity_id]) { lay.boost[x.entity_id] = Date.now(); changed = true; } });
+    if (changed && this._lay) this._save();
+    const start = Math.max(...run.map(x => lay.boost[x.entity_id]));
+    const left = Math.ceil((start + lay.boost_min * 60000 - Date.now()) / 60000);
+    return left > 0 ? `noch ${left} min` : 'läuft';
+  }
+  _cleanBoost() {
+    if (!this._lay) return;
+    let ch = false;
+    Object.keys(this._lay.boost).forEach(id => { const s = this._s(id); if (!s || !this._boosting(s)) { delete this._lay.boost[id]; ch = true; } });
+    if (ch) this._save();
+  }
+  _startBoost(ids) {
+    ids.forEach(id => { this._lay.boost[id] = Date.now(); });
+    this._save();
+    this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'boost' });
+  }
+
+  _renderRooms() {
+    const k = this._k;
+    if (!k.rooms) return;
+    const rooms = this._rooms(), lay = this._lay || { hidden: [] }, arr = !!this._arrange;
+    this._roomList = rooms;
+    this._cleanBoost();
+    const allClim = rooms.flatMap(r => r.climate).filter(x => this._canBoost(x));
+    const allBoost = this._boostInfo(allClim);
+    const quick = `<button class="qb" data-q="close">${svg('blind')} Alle Jalousien zu</button><button class="qb" data-q="open">${svg('blind')} Alle auf</button>`
+      + `<button class="qb" data-q="off">${svg('bulb')} Alle Lichter aus</button>`
+      + (allClim.length ? `<button class="qb ${allBoost ? 'on' : ''}" data-q="boost">${svg('heat')} ${allBoost ? 'Boost ' + allBoost + ' · verlängern' : 'Boost für alle'}</button>` : '');
+    const hint = arr ? `<div class="hint">Pfeile verschieben eine Kachel, das Auge blendet sie aus.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>` : '';
+    let html = '';
+    const vis = rooms.filter(r => arr || !lay.hidden.includes(r.id));
+    vis.forEach(r => {
+      const temps = r.climate.map(x => x.attributes.current_temperature).filter(v => v != null);
+      const t = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;
+      const lo = r.light.filter(x => x.state === 'on').length + r.sw.filter(x => x.state === 'on').length;
+      const pos = x => x.attributes.current_position != null ? x.attributes.current_position : x.state === 'closed' ? 0 : 100;
+      const cz = r.cover.filter(x => pos(x) <= 0).length, ca = r.cover.filter(x => pos(x) >= 100).length;
+      const bi = this._boostInfo(r.climate);
+      const pills = [];
+      if (r.light.length || r.sw.length) pills.push(`<span class="pill ${lo ? '' : 'off'}">${lo ? lo + ' an' : 'Licht aus'}</span>`);
+      if (r.cover.length) pills.push(`<span class="pill off">${ca === r.cover.length ? 'Jalousie auf' : cz === r.cover.length ? 'Jalousie zu' : 'Jalousie teils'}</span>`);
+      if (bi) pills.push(`<span class="pill warn">Boost ${bi}</span>`);
+      const hid = lay.hidden.includes(r.id);
+      html += `<div class="rt ${hid ? 'hid' : ''}" role="button" tabindex="0" data-room="${r.id}" aria-expanded="${!arr && this._open === r.id}"><b>${r.name}</b>`
+        + (t != null ? `<span class="v num">${de(t, 1)}<small> °C</small></span>` : '')
+        + `<span class="m">${pills.join('')}</span>`
+        + (arr ? `<span class="mv"><button data-mv="${r.id}|-1" aria-label="${r.name} nach vorne">‹</button><button data-mv="${r.id}|1" aria-label="${r.name} nach hinten">›</button><button data-hide="${r.id}" aria-label="${r.name} aus- oder einblenden">${svg('eye')}</button></span>` : '')
+        + `</div>`;
+      if (!arr && this._open === r.id) html += `<div class="rp">${this._roomPanel(r)}</div>`;
+    });
+    if (!rooms.length) html = '<p class="sub">Noch keine Bereiche mit Geräten gefunden. Ordne Lichter, Jalousien und Thermostate in Home Assistant einem Bereich zu.</p>';
+    const sig = quick + hint + html;
+    if (sig === this._roomSig || (this._busy && Date.now() < this._busy)) return;
+    this._roomSig = sig;
+    k.quick.innerHTML = quick; k.ahint.innerHTML = hint; k.rooms.innerHTML = html;
+    const ab = this.shadowRoot.querySelector('[data-arrange]');
+    ab.setAttribute('aria-pressed', arr); ab.textContent = arr ? '✓ Fertig' : '↕ Anordnen';
+  }
+
+  _roomPanel(r) {
+    let h = '';
+    const row = (ico, id, name, sub, ctl, extra = '') => `<div class="row" style="flex-wrap:wrap"><div class="ico">${svg(ico)}</div><div class="txt" data-more="${id}"><b>${name}</b><span>${sub}</span></div>${ctl}${extra}</div>`;
+    const tg = s => `<button class="tg" role="switch" aria-label="${s.attributes.friendly_name}" aria-checked="${s.state === 'on'}" data-toggle="${s.entity_id}"></button>`;
+    if (r.light.length || r.sw.length) {
+      h += '<div class="sect">Licht</div>';
+      r.light.forEach(s => {
+        const p = this._pct(s), dimm = (s.attributes.supported_color_modes || []).some(m => m !== 'onoff');
+        const sub = s.state === 'on' ? (p != null ? `An · ${p} %` : 'An') : s.state === 'off' ? 'Aus' : 'nicht erreichbar';
+        h += row('bulb', s.entity_id, this._nm(s, r), sub, tg(s),
+          dimm && s.state === 'on' ? `<input type="range" class="dim" min="1" max="100" value="${p || 100}" data-dim="${s.entity_id}" aria-label="${this._nm(s, r)} dimmen">` : '');
+      });
+      r.sw.forEach(s => { h += row('plug', s.entity_id, this._nm(s, r), s.state === 'on' ? 'An' : s.state === 'off' ? 'Aus' : 'nicht erreichbar', tg(s)); });
+    }
+    if (r.scene.length) h += `<div class="sect">Szenen</div><div class="scw" style="margin-top:6px">${r.scene.map(s => `<button class="scb" type="button" data-scene="${s.entity_id}">${s.attributes.name || s.attributes.friendly_name}</button>`).join('')}</div>`;
+    if (r.cover.length) {
+      h += '<div class="sect">Jalousien</div>';
+      r.cover.forEach(s => {
+        const pos = s.attributes.current_position, setp = (s.attributes.supported_features || 0) & 4;
+        const sub = s.state === 'opening' ? 'fährt hoch' : s.state === 'closing' ? 'fährt runter' : pos != null ? this._posTxt(pos) : s.state === 'closed' ? 'Zu' : s.state === 'open' ? 'Auf' : 'nicht erreichbar';
+        h += row('blind', s.entity_id, this._nm(s, r), sub,
+          `<span class="cb"><button data-cv="close|${s.entity_id}">Zu</button><button data-cv="stop|${s.entity_id}">Stop</button><button data-cv="open|${s.entity_id}">Auf</button></span>`,
+          setp && pos != null ? `<input type="range" class="pos" min="0" max="100" step="5" value="${pos}" data-pos="${s.entity_id}" aria-label="${this._nm(s, r)} Position">` : '');
+      });
+    }
+    if (r.climate.length) {
+      h += '<div class="sect">Heizung</div>';
+      const bc = r.climate.filter(x => this._canBoost(x)), bi = this._boostInfo(r.climate);
+      r.climate.forEach(s => {
+        const a = s.attributes;
+        const sub = [a.temperature != null ? `Soll ${de(a.temperature, 1)} °C` : '', a.current_humidity != null ? `${Math.round(a.current_humidity)} % Feuchte` : ''].filter(Boolean).join(' · ');
+        h += row('heat', s.entity_id, this._nm(s, r), sub, `<span class="num" style="font-family:var(--display);font-weight:600">${a.current_temperature != null ? de(a.current_temperature, 1) + ' °C' : '–'}</span>`);
+      });
+      if (bc.length) h += `<div class="row"><div class="txt"><b>Boost</b><span>${bi ? 'läuft, ' + bi : 'aus'}</span></div><button class="bst ${bi ? 'on' : ''}" data-boost="${r.id}">${bi ? 'Verlängern' : 'Boost starten'}</button>${bi ? `<button class="bst" data-boostoff="${r.id}">Beenden</button>` : ''}</div>`;
+    }
+    return h || '<p class="sub">Keine steuerbaren Geräte in diesem Bereich.</p>';
+  }
+
+  _roomClick(e) {
+    const t = e.target.closest('button,[data-room]'); if (!t) return false;
+    const d = t.dataset, h = this._hass, rooms = this._roomList || [];
+    const room = id => rooms.find(r => r.id === id);
+    const done = () => { this._roomSig = null; this._busy = 0; this._renderRooms(); return true; };
+    if (!this._lay && (d.mv || d.hide || d.boost || d.q)) return true;
+    if (t.hasAttribute('data-arrange')) { this._arrange = !this._arrange; return done(); }
+    if (d.mv) {
+      const [id, st] = d.mv.split('|');
+      const ids = rooms.map(r => r.id), i = ids.indexOf(id), j = i + +st;
+      if (j >= 0 && j < ids.length) { ids.splice(i, 1); ids.splice(j, 0, id); }
+      this._lay.order = ids; this._save(); return done();
+    }
+    if (d.hide) {
+      const hd = this._lay.hidden;
+      this._lay.hidden = hd.includes(d.hide) ? hd.filter(x => x !== d.hide) : [...hd, d.hide];
+      this._save(); return done();
+    }
+    if (d.room) { if (!this._arrange) this._open = this._open === d.room ? null : d.room; return done(); }
+    if (d.cv) { const [a, id] = d.cv.split('|'); h.callService('cover', a + '_cover', { entity_id: id }); return true; }
+    if (d.boost) { const r = room(d.boost); if (r) this._startBoost(r.climate.filter(x => this._canBoost(x)).map(x => x.entity_id)); return done(); }
+    if (d.boostoff) {
+      const ids = (room(d.boostoff) || { climate: [] }).climate.filter(x => this._boosting(x)).map(x => x.entity_id);
+      if (ids.length) h.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'none' });
+      return true;
+    }
+    if (d.q) {
+      const all = k => rooms.filter(r => !this._lay.hidden.includes(r.id)).flatMap(r => r[k]).map(x => x.entity_id);
+      if (d.q === 'close' || d.q === 'open') { const ids = all('cover'); if (ids.length) h.callService('cover', d.q + '_cover', { entity_id: ids }); }
+      if (d.q === 'off') { const ids = all('light'); if (ids.length) h.callService('light', 'turn_off', { entity_id: ids }); }
+      if (d.q === 'boost') { const ids = rooms.flatMap(r => r.climate).filter(x => this._canBoost(x)).map(x => x.entity_id); if (ids.length) this._startBoost(ids); return done(); }
+      return true;
+    }
+    if (d.arm) { this._armAsk = d.arm; this._renderAlarm(); return true; }
+    if (d.armNo !== undefined) { this._armAsk = null; this._renderAlarm(); return true; }
+    if (d.armYes !== undefined) { this._doArm(this._armAsk === 'on'); this._armAsk = null; this._renderAlarm(); return true; }
+    return false;
+  }
+
+  // ---------- Alarmanlage ----------
+  _alarmEnt() {
+    const c = this._cfg, st = this._hass.states, all = Object.values(st);
+    const nm = s => (s.attributes.friendly_name || '').trim();
+    const find = (doms, re) => { const s = all.find(x => doms.includes(x.entity_id.split('.')[0]) && re.test(nm(x))); return s ? s.entity_id : null; };
+    return {
+      on: c.alarm_on || find(['button', 'script'], /^(alarm(anlage)? )?(sch(ä|ae)rfen|scharf schalten)$/i),
+      off: c.alarm_off || find(['button', 'script'], /^(alarm(anlage)? )?(entsch(ä|ae)rfen|unscharf( schalten)?)$/i),
+      state: c.alarm_state || find(['switch', 'input_boolean', 'binary_sensor', 'select', 'sensor', 'alarm_control_panel'], /^alarm(anlage)?( scharf| status| zustand)?$/i),
+    };
+  }
+  _armed(a) {
+    const s = this._s(a.state); if (!s) return null;
+    const v = String(s.state).toLowerCase();
+    if (v === 'unavailable' || v === 'unknown') return null;
+    return /^(on|true|scharf|armed|armed_.*|ein|an)$/.test(v);
+  }
+  _doArm(on) {
+    const a = this._alarmEnt(), h = this._hass, id = on ? a.on : a.off;
+    if (id) { const dom = id.split('.')[0]; h.callService(dom, dom === 'button' ? 'press' : 'turn_on', { entity_id: id }); return; }
+    if (a.state && /^(switch|input_boolean)\./.test(a.state)) h.callService('homeassistant', on ? 'turn_on' : 'turn_off', { entity_id: a.state });
+    if (a.state && a.state.startsWith('alarm_control_panel.')) h.callService('alarm_control_panel', on ? 'alarm_arm_away' : 'alarm_disarm', { entity_id: a.state });
+  }
+  _renderAlarm() {
+    const el = this._k.alarm; if (!el) return;
+    const a = this._alarmEnt(), armed = this._armed(a);
+    const can = a.on || a.off || (a.state && /^(switch|input_boolean|alarm_control_panel)\./.test(a.state));
+    let html;
+    if (!can && armed === null) {
+      html = `<div class="alarm"><div class="st">${svg('lock')}<div><b>Alarmanlage</b><span>noch nicht verbunden, kommt aus der Homematic-Zentrale</span></div></div></div>`;
+    } else {
+      const ask = this._armAsk ? `<div class="cf">${this._armAsk === 'on' ? 'Wirklich scharf schalten?' : 'Wirklich unscharf schalten?'}<button class="y" data-arm-yes>Ja</button><button data-arm-no>Abbrechen</button></div>` : '';
+      html = `<div class="alarm ${armed ? 'on' : ''}"><div class="st">${svg(armed ? 'lock' : 'shield')}<div><b>Alarmanlage ${armed === null ? '' : armed ? 'scharf' : 'unscharf'}</b><span>${armed ? 'Sirene löst bei Öffnen aus' : 'Antippen zum Schalten'}</span></div></div>
+        <div class="ab"><button data-arm="on" ${armed ? 'disabled' : ''}>Scharf schalten</button><button class="off" data-arm="off" ${armed === false ? 'disabled' : ''}>Unscharf</button></div>${ask}</div>`;
+    }
+    if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; }
+  }
+
+  // Suchwort: find oder aus dem Namen (Haustür -> haustuer)
+  _key(m) {
+    const t = (m.find || m.name || '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
+    return t.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  }
+
+  // Klingel gedrückt? binary_sensor mit Stichwort und Besucher/Visitor
+  _ringing(m) {
+    const f = this._key(m);
+    if (!f) return false;
+    return Object.values(this._hass.states).some(s => s.entity_id.startsWith('binary_sensor.') && s.entity_id.includes(f)
+      && /besucher|visitor/.test(s.entity_id) && s.state === 'on');
+  }
+
+  _stream(id) { const s = this._s(id); return !!(s && (s.attributes.supported_features & 2)); }
+
+  _more(entityId) {
+    const ev = new Event('hass-more-info', { bubbles: true, composed: true });
+    ev.detail = { entityId };
+    this.dispatchEvent(ev);
+  }
+  _set(k, v) { const e = this._k[k]; if (e && e.textContent !== String(v)) e.textContent = v; }
+
+  _update() {
+    const c = this._cfg, k = this._k;
+    const h = new Date().getHours();
+    this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
+
+    // Wetter jetzt
+    const w = this._s(c.weather);
+    if (w) {
+      this._set('wt', de(w.attributes.temperature, 1));
+      this._set('wc', WX[w.state] || w.state);
+      const parts = [];
+      if (w.attributes.humidity != null) parts.push(`${Math.round(w.attributes.humidity)} % Feuchte`);
+      if (w.attributes.wind_speed != null) parts.push(`${Math.round(w.attributes.wind_speed)} ${w.attributes.wind_speed_unit || 'km/h'} Wind`);
+      this._set('wd', parts.join(' · '));
+    }
+
+    // Energie
+    const pv = this._kw(c.pv), gin = this._kw(c.grid_in) || 0, gout = this._kw(c.grid_out) || 0, wb = this._kw(c.wallbox) || 0;
+    const grid = gin - gout;
+    const batP = c.batteries.reduce((a, b) => a + (this._kw(b.power) || 0), 0); // positiv = lädt
+    const house = Math.max(0, (pv || 0) + grid - wb - batP);
+    this._set('vpv', pv === null ? '–' : de(pv, 2));
+    this._set('vhouse', de(house, 2));
+    this._set('vgrid', de(grid, 2));
+    this._set('sgrid', grid < -0.01 ? 'Einspeisung' : grid > 0.01 ? 'Bezug' : 'ausgeglichen');
+    this._set('esub', (pv || 0) > 0.05
+      ? (grid < 0 ? 'Die Sonne liefert mehr, als du gerade brauchst.' : 'Die Sonne liefert gerade Energie.')
+      : 'Gerade kommt kein Sonnenstrom, du beziehst aus dem Netz.');
+    k.lpv.classList.toggle('idle', !((pv || 0) > 0.05));
+    k.lgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
+    k.lgrid.classList.toggle('rev', grid > 0); // Bezug: vom Netz zum Haus
+    k.lbat.classList.toggle('rev', batP < 0); // Entladen: vom Speicher zum Haus
+    k.lwb.classList.toggle('idle', wb < 0.05);
+    k.lbat.classList.toggle('idle', Math.abs(batP) < 0.02);
+
+    // Batterien
+    const socs = [];
+    c.batteries.forEach((b, i) => {
+      const soc = this._n(b.soc), p = this._kw(b.power);
+      if (soc === null) {
+        k['bsoc' + i].className = 'pill off'; this._set('bsoc' + i, 'noch nicht verbunden');
+        k['bbar' + i].style.width = '0'; this._set('bsub' + i, 'wird angezeigt, sobald das Gerät in Home Assistant ist');
+      } else {
+        socs.push(soc);
+        k['bsoc' + i].className = 'num'; this._set('bsoc' + i, `${Math.round(soc)} %`);
+        k['bbar' + i].style.width = `${Math.max(0, Math.min(100, soc))}%`;
+        this._set('bsub' + i, p === null ? '' : p > 0.02 ? `lädt ${de(p, 1)} kW` : p < -0.02 ? `entlädt ${de(-p, 1)} kW` : 'Ruhe');
+      }
+    });
+    this._set('vbat', socs.length ? Math.round(socs.reduce((a, b) => a + b, 0) / socs.length) : '–');
+    this._set('sbat', socs.length ? 'Anker + Marstek' : 'noch nicht verbunden');
+    this._set('bsub', socs.length ? 'Ladestand deiner Speicher' : 'Vorbereitet, Anbindung folgt');
+
+    // Wallbox und Auto
+    const soc = this._n(c.car_soc);
+    this._set('csoc', soc === null ? '–' : `${Math.round(soc)} %`);
+    k.cbar.style.width = soc === null ? '0' : `${soc}%`;
+    this._set('wbp', de(wb, 1));
+    this._set('wbh', wb > 0.05 ? 'Auto lädt' : 'Wallbox bereit');
+    this._set('wbs', wb > 0.05 ? ((pv || 0) > wb ? 'Mit Sonnenstrom' : 'Mit Netz- und Sonnenstrom') : 'Gerade kein Ladevorgang');
+    const rel = this._s(c.wallbox_release);
+    k.wbr.setAttribute('aria-checked', rel && rel.state === 'on' ? 'true' : 'false');
+
+    // Sicherheit
+    const open = c.contacts.filter(x => { const s = this._s(x.entity); return s && s.state === 'on'; });
+    c.contacts.forEach((x, i) => {
+      const s = this._s(x.entity), e = k['ct' + i];
+      if (!s) { e.className = 'pill off'; this._set('ct' + i, 'nicht gefunden'); }
+      else if (s.state === 'unavailable' || s.state === 'unknown') { e.className = 'pill warn'; this._set('ct' + i, 'nicht erreichbar'); }
+      else if (s.state === 'on') { e.className = 'pill warn'; this._set('ct' + i, 'offen'); }
+      else { e.className = 'pill off'; this._set('ct' + i, 'zu'); }
+    });
+    const lost = c.contacts.filter(x => { const s = this._s(x.entity); return s && (s.state === 'unavailable' || s.state === 'unknown'); });
+    const known = c.contacts.filter(x => this._s(x.entity)).length - lost.length;
+    this._set('nopen', open.length);
+    this._set('nclosed', known - open.length);
+    k.shield.classList.toggle('alert', open.length > 0 || lost.length > 0);
+    this._set('sech', open.length ? `${open.length} offen` : lost.length ? `${lost.length} ohne Verbindung` : 'Alles im Blick');
+    this._set('secs', open.length ? 'Bitte prüfen, ob das so gewollt ist.' : lost.length ? 'Ein Kontakt meldet sich nicht, vielleicht ist die Batterie leer.' : 'Alle Türen und Fenster sind zu.');
+
+    // Kopfzeile
+    const lightsOn = Object.keys(this._hass.states).filter(id => id.startsWith('light.') && this._hass.states[id].state === 'on').length;
+    this._set('chOpen', open.length === 1 ? '1 Tür/Fenster offen' : `${open.length} Türen/Fenster offen`);
+    this._set('chLights', lightsOn === 1 ? '1 Licht an' : `${lightsOn} Lichter an`);
+
+    // Räume und Alarmanlage
+    this._renderRooms();
+    this._renderAlarm();
+
+    // Kameras
+    this._cams.forEach((m, i) => {
+      const s = this._s(m.id), v = k['cv' + i];
+      if (s && s.attributes.entity_picture) {
+        const src = s.attributes.entity_picture;
+        if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live">LIVE</span>`; }
+        this._set('cs' + i, m.brand);
+      } else {
+        if (v.dataset.src !== '') { v.dataset.src = ''; v.innerHTML = svg('cam'); }
+        this._set('cs' + i, m.app ? `${m.brand} · nur App` : `${m.brand} · folgt`);
+      }
+    });
+
+    // Hinweise
+    const hints = [];
+    open.forEach(x => {
+      const s = this._s(x.entity);
+      const min = Math.round((Date.now() - new Date(s.last_changed)) / 60000);
+      hints.push([`${x.name} offen`, min < 60 ? `seit ${min} min` : `seit ${Math.round(min / 60)} h`, 'warn']);
+    });
+    this._cams.forEach(m => { if (this._ringing(m)) hints.push([`Es klingelt: ${m.name}`, 'jetzt', 'warn']); });
+    lost.forEach(x => hints.push([`${x.name} meldet sich nicht`, 'Batterie?', 'warn']));
+    Object.values(this._hass.states).forEach(s => {
+      if (s.attributes.device_class === 'battery' && s.entity_id.startsWith('sensor.')) {
+        const v = parseFloat(s.state);
+        if (!isNaN(v) && v < 20) hints.push([`Batterie ${s.attributes.friendly_name.replace(/ ?Batterie| ?Battery level/i, '')}`, `${Math.round(v)} %`, 'warn']);
+      }
+    });
+    if (wb > 0.05 && soc !== null) hints.push(['Auto lädt', `${Math.round(soc)} %`, 'info']);
+    const hk = JSON.stringify(hints);
+    if (k.hints.dataset.v !== hk) {
+      k.hints.dataset.v = hk;
+      k.hints.innerHTML = hints.length
+        ? hints.slice(0, 6).map(([a, b, cl]) => `<div class="row"><div class="txt"><b>${a}</b></div><span class="pill ${cl}">${b}</span></div>`).join('')
+        : '<div class="row"><div class="txt"><b>Alles in Ordnung</b><span>Gerade gibt es nichts zu tun.</span></div></div>';
+    }
+  }
+
+  _subForecast() {
+    this._fcSub = true;
+    this._hass.connection.subscribeMessage(msg => {
+      const fc = (msg.forecast || []).slice(0, 5);
+      const k = this._k.fc; if (!k) return;
+      k.innerHTML = fc.map(d => {
+        const dt = new Date(d.datetime);
+        return `<div>${DAYS[dt.getDay()]}${wxIcon(d.condition)}<b class="num">${Math.round(d.temperature)}°</b><span class="num" style="color:var(--muted)">${d.templow != null ? Math.round(d.templow) + '°' : ''}</span></div>`;
+      }).join('');
+      if (fc[1]) this._set('wxs', `Morgen ${WX[fc[1].condition] || ''}, bis ${Math.round(fc[1].temperature)} °C`);
+    }, { type: 'weather/subscribe_forecast', forecast_type: 'daily', entity_id: this._cfg.weather }).catch(() => { this._fcSub = false; });
+  }
+
+  async _loadHistory() {
+    try {
+      const prefs = await this._hass.callWS({ type: 'energy/get_prefs' });
+      let pvId = null, inIds = [], outIds = [], wbId = null;
+      (prefs.energy_sources || []).forEach(s => {
+        if (s.type === 'solar' && !pvId) pvId = s.stat_energy_from;
+        if (s.type === 'grid') {
+          (s.flow_from || []).forEach(f => inIds.push(f.stat_energy_from));
+          (s.flow_to || []).forEach(f => outIds.push(f.stat_energy_to));
+          if (s.stat_energy_from) inIds.push(s.stat_energy_from);
+          if (s.stat_energy_to) outIds.push(s.stat_energy_to);
+        }
+      });
+      (prefs.device_consumption || []).forEach(d => { if (/ladestation|smaev|wallbox/i.test(d.stat_consumption)) wbId = d.stat_consumption; });
+      const ids = [pvId, ...inIds, ...outIds, wbId].filter(Boolean);
+      if (!ids.length) { this._k.hist.innerHTML = '<p class="sub">Keine Energie-Konfiguration gefunden.</p>'; return; }
+      const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 6);
+      const stats = await this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: start.toISOString(), period: 'day', statistic_ids: ids, types: ['change'], units: { energy: 'kWh' } });
+      const days = [];
+      for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
+      const series = id => days.map(d => {
+        const row = (stats[id] || []).find(r => new Date(r.start).toDateString() === d.toDateString());
+        return row && row.change ? Math.max(0, row.change) : 0;
+      });
+      const sum = arr => arr.reduce((a, b) => a.map((x, i) => x + b[i]), days.map(() => 0));
+      const pv = pvId ? series(pvId) : days.map(() => 0);
+      const gin = sum(inIds.map(series)), gout = sum(outIds.map(series));
+      const wb = wbId ? series(wbId) : days.map(() => 0);
+      const t = 6;
+      this._set('today', `${de(pv[t], 1)} kWh`);
+      const use = pv[t] + gin[t] - gout[t];
+      this._set('aut', use > 0 ? `${Math.round(Math.max(0, Math.min(1, 1 - gin[t] / use)) * 100)} %` : '–');
+      this._set('wbtoday', de(wb[t], 1));
+      this._drawHist(days, [[pv, 'var(--sun)'], [gin, 'var(--grid)'], [wb, 'var(--house)']]);
+    } catch (e) {
+      this._k.hist.innerHTML = '<p class="sub">Verlauf konnte nicht geladen werden.</p>';
+    }
+  }
+
+  _drawHist(days, sets) {
+    const W = 1100, H = 150, l = 30, b = 22, t = 8;
+    const peak = Math.max(10, ...sets.flatMap(s => s[0]));
+    const step = peak > 60 ? 20 : peak > 30 ? 10 : 5;
+    const max = Math.ceil(peak / step) * step;
+    const cw = (W - l) / days.length, y = v => t + (H - t - b) * (1 - v / max);
+    let g = '';
+    for (let v = 0; v <= max; v += step) g += `<line x1="${l}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${l - 6}" y="${y(v) + 3}" text-anchor="end">${v}</text>`;
+    const bw = cw * 0.18;
+    days.forEach((d, i) => {
+      const x0 = l + i * cw + cw / 2 - (bw * sets.length + 2 * (sets.length - 1)) / 2;
+      sets.forEach(([vals, col], j) => { const v = vals[i]; if (v > 0) g += `<rect x="${x0 + j * (bw + 2)}" y="${y(v)}" width="${bw}" height="${y(0) - y(v)}" rx="2" fill="${col}"/>`; });
+      g += `<text x="${l + i * cw + cw / 2}" y="${H - 6}" text-anchor="middle">${i === days.length - 1 ? 'heute' : DAYS[d.getDay()]}</text>`;
+    });
+    this._k.hist.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Erzeugung und Verbrauch der letzten 7 Tage">${g}</svg>`;
+  }
+}
+
+if (!customElements.get('zuhause-card')) customElements.define('zuhause-card', ZuhauseCard);
+window.customCards = window.customCards || [];
+window.customCards.push({ type: 'zuhause-card', name: 'Zuhause', description: 'Startseite mit Energie, Sicherheit, Raumklima, Kameras und Wetter' });

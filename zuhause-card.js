@@ -1,3 +1,20 @@
+// Zuhause-Karte, Lader. Nicht von Hand bearbeiten: Quelle ist card.js, erzeugt mit build.sh.
+(async () => {
+  if (customElements.get('zuhause-card')) return;
+  const url = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/card.js?t=' + Date.now();
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const u = URL.createObjectURL(new Blob([await r.text()], { type: 'text/javascript' }));
+    window.__zuhauseSrc = 'github';
+    await import(u);
+    if (customElements.get('zuhause-card')) return;
+  } catch (e) { /* offline: eingebaute Kopie */ }
+  window.__zuhauseSrc = 'lokal';
+  zuhauseLocal();
+})();
+
+function zuhauseLocal() {
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
@@ -291,7 +308,7 @@ class ZuhauseCard extends HTMLElement {
     const contacts = c.contacts.map((k, i) => `<div class="row"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span></div>`).join('');
 
     root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="grid">
-      <section class="card hero"><span class="ver">v${VERSION}</span>
+      <section class="card hero"><span class="ver">v${VERSION}${window.__zuhauseSrc === 'lokal' ? ' · lokal' : ''}</span>
         <div><h1><span data-k="greet">Hallo</span>,<br><em>${c.name}.</em></h1>
           <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
           <div class="chips"><span class="chip" data-k="chOpen"></span><span class="chip" data-k="chLights"></span></div></div>
@@ -942,3 +959,4 @@ class ZuhauseCard extends HTMLElement {
 if (!customElements.get('zuhause-card')) customElements.define('zuhause-card', ZuhauseCard);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: 'zuhause-card', name: 'Zuhause', description: 'Startseite mit Energie, Sicherheit, Raumklima, Kameras und Wetter' });
+}
