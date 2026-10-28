@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.5.1';
+const VERSION = '2.5.2';
 
 const DEFAULTS = {
   name: '',
@@ -456,8 +456,14 @@ class ZuhauseCard extends HTMLElement {
       if (et) { this._etab = +et.dataset.etab; this._drawEnergy(); return; }
       const t = e.target.closest('[data-toggle]');
       if (t) {
-        const id = t.dataset.toggle;
-        if (id && this._s(id)) this._hass.callService('homeassistant', 'toggle', { entity_id: id });
+        const ids = (t.dataset.toggle || '').split(',').filter(x => this._s(x));
+        // mehrere Kanäle: an = einer an, aus = alle aus
+        if (ids.length > 1) {
+          const on = ids.some(x => this._s(x).state === 'on');
+          // einschalten über den zuletzt benutzten Kanal (z. B. Kanal 5 wie in der CCU)
+          const last = ids.slice().sort((x, y) => Date.parse(this._s(y).last_changed || 0) - Date.parse(this._s(x).last_changed || 0))[0];
+          this._hass.callService('homeassistant', on ? 'turn_off' : 'turn_on', { entity_id: on ? ids : last });
+        } else if (ids.length) this._hass.callService('homeassistant', 'toggle', { entity_id: ids[0] });
         return;
       }
       const sc = e.target.closest('[data-scene]');
@@ -534,6 +540,7 @@ class ZuhauseCard extends HTMLElement {
       return /homematic|hue|shelly|tasmota|esphome|zha|zwave|mqtt|tplink|tuya|deconz|tradfri|template|group/.test(pf)
         && !/sirene|alarm/i.test(s.attributes.friendly_name || s.entity_id);
     };
+    const hmSw = {};
     all.forEach(s => {
       const id = s.entity_id, dom = id.split('.')[0];
       if (!['light', 'cover', 'climate', 'switch'].includes(dom)) return;
@@ -543,8 +550,21 @@ class ZuhauseCard extends HTMLElement {
       // ohne Bereich: über den Namen zuordnen ("Wandthermostat Wohnzimmer 1" -> Wohnzimmer)
       if (!a) { const n = nrm(s.attributes.friendly_name); const m = areaList.find(x => n.includes(nrm(x.name))); if (!m) return; a = m.area_id; }
       if (dom === 'light') { if (!inGroup.has(id)) add(a, 'light', s); }
-      else if (dom === 'switch') { if (swOk(s)) add(a, 'sw', s); }
+      else if (dom === 'switch') {
+        if (!swOk(s)) return;
+        // Homematic-Schaltaktor: mehrere Kanäle (4, 5, 6) für dieselbe Lampe zu einer Zeile zusammenfassen
+        const e = h.entities[id] || {}, dv = /homematic/.test(e.platform || '') && e.device_id;
+        if (dv) { (hmSw[dv] = hmSw[dv] || { a, list: [] }).list.push(s); return; }
+        add(a, 'sw', s);
+      }
       else add(a, dom, s);
+    });
+    Object.values(hmSw).forEach(({ a, list }) => {
+      if (list.length === 1) { add(a, 'sw', list[0]); return; }
+      list.sort((x, y) => x.entity_id.localeCompare(y.entity_id));
+      const on = list.some(x => x.state === 'on'), av = list.some(x => x.state === 'on' || x.state === 'off');
+      const nm = (list[0].attributes.friendly_name || list[0].entity_id).replace(/\s+\d+$/, '');
+      add(a, 'sw', { entity_id: list[0].entity_id, state: on ? 'on' : av ? 'off' : 'unavailable', attributes: Object.assign({}, list[0].attributes, { friendly_name: nm }), _grp: list.map(x => x.entity_id) });
     });
     // Bereiche zusammenlegen: selbst gewählt (Anordnen) oder automatisch,
     // wenn ein Name den anderen enthält ("Wohnzimmer klein" -> "Wohnzimmer")
@@ -732,7 +752,7 @@ class ZuhauseCard extends HTMLElement {
   _roomPanel(r) {
     let h = '';
     const row = (ico, id, name, sub, ctl, extra = '') => `<div class="row" style="flex-wrap:wrap"><div class="ico">${svg(ico)}</div><div class="txt" data-more="${id}"><b>${name}</b><span>${sub}</span></div>${ctl}${extra}</div>`;
-    const tg = s => `<button class="tg" role="switch" aria-label="${s.attributes.friendly_name}" aria-checked="${s.state === 'on'}" data-toggle="${s.entity_id}"></button>`;
+    const tg = s => `<button class="tg" role="switch" aria-label="${s.attributes.friendly_name}" aria-checked="${s.state === 'on'}" data-toggle="${(s._grp || [s.entity_id]).join(',')}"></button>`;
     if (r.light.length || r.sw.length) {
       h += '<div class="sect">Licht</div>';
       r.light.forEach(s => {
