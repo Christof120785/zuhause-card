@@ -1,7 +1,8 @@
 // Zuhause-Karte: komplette Startseite als eine Karte für Home Assistant.
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
-const VERSION = '1.4.1';
+// Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
+const VERSION = '2.0.0';
 
 const DEFAULTS = {
   name: '',
@@ -21,10 +22,23 @@ const IC = {
   bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>',
   shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
   cam: '<path d="M3 7h12v10H3zM15 10l6-3v10l-6-3z"/>',
+  blind: '<path d="M4 4h16M5 4v12h14V4M5 8h14M5 12h14M12 16v4"/>',
+  heat: '<path d="M12 3v11M9 6h6M9 9h6"/><circle cx="12" cy="17" r="3"/>',
+  plug: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k] || ''}</svg>`;
 const de = (v, d = 1) => Number(v).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
 const WX = { 'clear-night': 'Klar', cloudy: 'Bewölkt', fog: 'Nebel', hail: 'Hagel', lightning: 'Gewitter', 'lightning-rainy': 'Gewitter', partlycloudy: 'Teils bewölkt', pouring: 'Starkregen', rainy: 'Regen', snowy: 'Schnee', 'snowy-rainy': 'Schneeregen', sunny: 'Sonnig', windy: 'Windig', 'windy-variant': 'Windig', exceptional: 'Unwetter' };
+function lev(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 9;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
 const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
 function wxIcon(c) {
@@ -63,8 +77,9 @@ const CSS = `
 @media(min-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero,.wide{grid-column:1/-1}}
 @media(min-width:1100px){.grid{grid-template-columns:repeat(12,minmax(0,1fr))}
   .hero{grid-column:span 12}.energy{grid-column:span 5}.store{grid-column:span 3}.wb{grid-column:span 4}
-  .sec{grid-column:span 3}.clima{grid-column:span 5}.sw{grid-column:span 4}
-  .cams{grid-column:span 6}.wx{grid-column:span 3}.hints{grid-column:span 3}.hist{grid-column:span 12}}
+  .sec{grid-column:span 4}.home{grid-column:span 8}
+  .cams{grid-column:span 4}.wx{grid-column:span 4}.hints{grid-column:span 4}.hist{grid-column:span 12}}
+@media(min-width:700px) and (max-width:1099px){.home{grid-column:1/-1}}
 .card{background:var(--card);border-radius:20px;padding:14px 16px;min-width:0;box-shadow:0 1px 2px rgba(20,30,50,.05)}
 .eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;display:flex;justify-content:space-between;gap:8px}
 .eyebrow span:last-child{letter-spacing:.02em;text-transform:none;color:var(--muted)}
@@ -158,14 +173,58 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .scb:focus-visible{outline:2px solid var(--grid);outline-offset:2px}
 .swg{display:grid;grid-template-columns:1fr 1fr;column-gap:14px}
 .swg .row:nth-child(2){border-top:0}
+/* Räume */
+.hhead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.arr{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px;font-weight:600}
+.arr[aria-pressed="true"]{background:var(--hero);color:var(--hero-fg);border-color:var(--hero)}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.qb{all:unset;cursor:pointer;display:flex;gap:6px;align-items:center;background:var(--tile);border-radius:10px;padding:7px 10px;font-size:12px;font-weight:600}
+.qb svg{width:15px;height:15px}
+.qb.on{background:var(--warn);color:#fff}
+.rg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;grid-auto-flow:row dense}
+@media(min-width:560px){.rg{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:1400px){.rg{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.rt{box-sizing:border-box;cursor:pointer;background:var(--tile);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:4px;position:relative;min-width:0}
+.rt[aria-expanded="true"]{outline:2px solid var(--hero)}
+.rt.hid{opacity:.4}
+.rt b{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rt .v{font-family:var(--display);font-size:19px;font-weight:600}
+.rt .v small{font-size:11px;color:var(--muted)}
+.rt .m{display:flex;gap:4px;flex-wrap:wrap}
+.rt .pill{font-size:10.5px;padding:2px 7px}
+.rt .pill.off{background:var(--card)}
+.mv{display:flex;gap:4px;margin-top:4px}
+.mv button{all:unset;cursor:pointer;width:28px;height:28px;border-radius:8px;background:var(--card);display:grid;place-items:center;font-weight:700}
+.mv svg{width:15px;height:15px}
+.rp{grid-column:1/-1;border:1px solid var(--line);border-radius:14px;padding:8px 12px 12px}
+.sect{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:10px 0 0}
+.pos{display:block;width:100%;margin:4px 0 0;accent-color:#3d7fb8}
+.cb{display:flex;gap:4px;flex:none}
+.cb button,.bst{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:9px;padding:5px 9px;font-size:12px;font-weight:600}
+.bst.on{background:var(--warn);color:#fff;border-color:var(--warn)}
+.hint{font-size:12px;background:var(--grid-soft);color:var(--grid);border-radius:10px;padding:8px 10px;margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint input{width:56px;font:inherit;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+/* Alarmanlage */
+.alarm{border-radius:14px;padding:10px 12px;background:var(--batt-soft);margin:6px 0 10px;display:grid;gap:8px}
+.alarm.on{background:var(--warn-soft)}
+.alarm .st{display:flex;gap:10px;align-items:center}
+.alarm .st svg{width:22px;height:22px;color:var(--ok)}
+.alarm.on .st svg{color:var(--warn)}
+.alarm b{font-family:var(--display);font-size:14.5px;display:block}
+.alarm span{font-size:11.5px;color:var(--muted)}
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ab button{all:unset;cursor:pointer;text-align:center;border-radius:10px;padding:8px;font-weight:700;font-size:12.5px;color:#fff;background:#c83a3a}
+.ab button.off{background:var(--ok)}
+.ab button[disabled]{opacity:.4;cursor:default}
+.cf{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;font-weight:600}
+.cf button{all:unset;cursor:pointer;border-radius:9px;padding:6px 11px;font-weight:700;background:var(--card)}
+.cf .y{background:#c83a3a;color:#fff}
 /* cameras */
-.camg{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
-@media(min-width:1100px){.camg{grid-template-columns:repeat(4,minmax(0,1fr))}.cam .meta{flex-direction:column;align-items:flex-start;gap:0}}
+.camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
 .cam .view{aspect-ratio:16/9;max-width:100%;position:relative;display:grid;place-items:center;background:var(--house-soft);color:var(--muted)}
 .cam .view img{width:100%;height:100%;object-fit:cover;display:block}
 .cam .view svg{width:28px;height:28px;opacity:.6}
-.cam .live.foto{background:rgba(40,40,50,.75)}
 .cam .live{position:absolute;top:6px;left:6px;background:rgba(200,30,30,.9);color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:5px}
 .cam .meta{padding:6px 9px;display:flex;justify-content:space-between;gap:6px;align-items:center;font-size:12.5px}
 .cam .meta span{font-size:11px;color:var(--muted)}
@@ -194,6 +253,7 @@ class ZuhauseCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (!this._lay) this._loadLayout();
     this._cams = this._camList();
     const sig = this._cams.map(m => m.id + '|' + m.name).join(',');
     if (sig !== this._camSig) { this._camSig = sig; this._built = false; }
@@ -226,10 +286,6 @@ class ZuhauseCard extends HTMLElement {
       <div class="bat"><div class="bl"><b>${b.name}</b><span data-k="bsoc${i}" class="num"></span></div>
       <div class="prog"><i data-k="bbar${i}" style="width:0"></i></div><div class="bs" data-k="bsub${i}"></div></div>`).join('');
     const firstPic = c.batteries.find(b => b.img);
-    const rooms = c.rooms.map((r, i) => `<div class="room" data-more="${r.t}"><div class="ico">${svg(r.icon)}</div><div class="l">${r.name}</div>
-      <div class="v num"><span data-k="rt${i}">–</span><small> °C</small></div><div class="h num" data-k="rh${i}"></div></div>`).join('');
-    const sws = c.switches.map((s, i) => `<div class="row"><div class="ico">${svg(s.icon)}</div><div class="txt" data-more="${s.entity}"><b id="swl${i}">${s.name}</b><span data-k="sws${i}"></span>${s.entity.startsWith('light.') ? `<input type="range" class="dim" min="1" max="100" step="1" aria-label="${s.name} dimmen" data-dim="${s.entity}" data-k="swd${i}" hidden>` : ''}</div>
-      <button class="tg" role="switch" aria-labelledby="swl${i}" aria-checked="false" data-toggle="${s.entity}" data-k="swt${i}"></button></div>`).join('');
     const cams = this._cams.map((m, i) => `<div class="cam" data-cam="${i}"><div class="view" data-k="cv${i}">${svg('cam')}</div>
       <div class="meta"><b>${m.name}</b><span data-k="cs${i}">${m.brand}</span></div></div>`).join('');
     const contacts = c.contacts.map((k, i) => `<div class="row"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span></div>`).join('');
@@ -298,21 +354,18 @@ class ZuhauseCard extends HTMLElement {
         <div class="eyebrow"><span>Sicherheit</span><span>Homematic</span></div>
         <div class="center"><div class="shield" data-k="shield">${svg('shield')}</div>
           <h2 data-k="sech">Alles im Blick</h2><p class="sub" data-k="secs"></p></div>
+        <div data-k="alarm"></div>
         <div class="stats two"><div><b class="num" data-k="nopen">–</b><span>offen</span></div><div><b class="num" data-k="nclosed">–</b><span>geschlossen</span></div></div>
         ${contacts}
       </section>
 
-      <section class="card clima">
-        <div class="eyebrow"><span>Raumklima</span><span>Homematic-Thermostate</span></div>
-        <h2>Hier fühlst du dich zu Hause</h2><p class="sub">Temperatur und Luftfeuchtigkeit</p>
-        <div class="rooms">${rooms}</div>
-      </section>
-
-      <section class="card sw">
-        <div class="eyebrow"><span>Schnellzugriff</span><span>Hue · Homematic</span></div>
-        <h2>Einfach schalten</h2><p class="sub">Deine häufig genutzten Geräte</p>
-        <div class="swg">${sws}</div>
-        <div data-k="scenes"></div>
+      <section class="card home">
+        <div class="hhead"><div><div class="eyebrow"><span>Räume</span></div>
+          <h2>Im Haus</h2><p class="sub">Antippen klappt Licht, Szenen, Jalousien und Heizung auf</p></div>
+          <button class="arr" data-arrange aria-pressed="false">↕ Anordnen</button></div>
+        <div class="quick" data-k="quick"></div>
+        <div data-k="ahint"></div>
+        <div class="rg" data-k="rooms"></div>
       </section>
 
       <section class="card cams">
@@ -343,14 +396,26 @@ class ZuhauseCard extends HTMLElement {
 
     this._k = {};
     root.querySelectorAll('[data-k]').forEach(e => { this._k[e.dataset.k] = e; });
-    root.addEventListener('input', e => { const d = e.target.closest('[data-dim]'); if (d) d.dataset.drag = '1'; });
+    // Während ein Slider bewegt wird, nicht neu zeichnen
+    root.addEventListener('pointerdown', e => { if (e.target.matches('input[type=range]')) this._busy = Date.now() + 60000; });
+    root.addEventListener('input', e => {
+      const t = e.target;
+      if (t.dataset.dim || t.dataset.pos) {
+        this._busy = Date.now() + 60000;
+        const s = t.closest('.row') && t.closest('.row').querySelector('.txt span');
+        if (s) s.textContent = t.dataset.dim ? `An · ${t.value} %` : this._posTxt(+t.value);
+      }
+    });
     root.addEventListener('change', e => {
-      const d = e.target.closest('[data-dim]'); if (!d) return;
-      delete d.dataset.drag;
-      this._hass.callService('light', 'turn_on', { entity_id: d.dataset.dim, brightness_pct: +d.value });
+      const t = e.target;
+      if (t.dataset.dim) this._hass.callService('light', 'turn_on', { entity_id: t.dataset.dim, brightness_pct: +t.value });
+      if (t.dataset.pos) this._hass.callService('cover', 'set_cover_position', { entity_id: t.dataset.pos, position: +t.value });
+      if (t.dataset.boostmin) { const v = Math.max(1, Math.min(240, +t.value || 30)); this._lay.boost_min = v; this._save(); }
+      if (t.dataset.dim || t.dataset.pos) this._busy = Date.now() + 1500;
     });
     root.addEventListener('click', e => {
-      if (e.target.closest('[data-dim]')) return;
+      if (e.target.closest('input')) return;
+      if (this._roomClick(e)) return;
       const t = e.target.closest('[data-toggle]');
       if (t) {
         const id = t.dataset.toggle;
@@ -363,52 +428,295 @@ class ZuhauseCard extends HTMLElement {
       if (cam) {
         const id = this._cams[+cam.dataset.cam].id;
         if (!id) return;
-        // Kameras ohne Livestream (z. B. Blink-Akkukameras): neues Foto anfordern
-        if (!this._stream(id) && this._hass.services.blink && this._hass.services.blink.trigger_camera) {
-          this._hass.callService('blink', 'trigger_camera', { entity_id: id }).catch(() => {});
-          setTimeout(() => this._hass.callService('homeassistant', 'update_entity', { entity_id: id }).catch(() => {}), 6000);
-        }
         this._more(id);
         return;
       }
       const m = e.target.closest('[data-more]');
       if (m && m.dataset.more) this._more(m.dataset.more);
     });
+    root.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-room]')) { e.preventDefault(); e.target.click(); }
+    });
+    this._roomSig = null;
     this._built = true;
   }
 
-  // Kameras: feste ID, Suche per Stichwort (find/Name), sonst freie Kameras der Marke.
-  // Weitere Kameras in Home Assistant werden automatisch angehängt.
+  // Kameras: feste ID oder Suche per Stichwort (find/Name). Angezeigt werden nur Kameras mit Livebild.
   _camList() {
-    const cams = this._cfg.cameras, st = this._hass.states;
+    const st = this._hass.states;
     const all = Object.keys(st).filter(id => id.startsWith('camera.')).sort();
-    const out = cams.map(m => Object.assign({}, m, { id: null })), keys = [];
-    out.forEach(m => {
-      if (m.entity && st[m.entity]) { m.id = m.entity; return; }
-      const f = this._key(m);
-      const ids = f ? all.filter(id => id.includes(f)) : [];
-      const id = ids.find(x => !/clear|klar|snapshot/.test(x)) || ids[0];
-      if (id) { m.id = id; keys.push(f); }
+    return this._cfg.cameras.map(m => {
+      let id = m.entity && st[m.entity] ? m.entity : null;
+      if (!id) {
+        const f = this._key(m);
+        const ids = f ? all.filter(x => x.includes(f)) : [];
+        id = ids.find(x => !/clear|klar|snapshot/.test(x)) || ids[0] || null;
+      }
+      return Object.assign({}, m, { id });
+    }).filter(m => m.id && this._stream(m.id));
+  }
+
+  // ---------- Anordnung (gespeichert in Home Assistant, pro Benutzer) ----------
+  async _loadLayout() {
+    this._lay = { order: [], hidden: [], boost: {}, boost_min: 30 };
+    try {
+      const r = await this._hass.callWS({ type: 'frontend/get_user_data', key: 'zuhause-card' });
+      if (r && r.value) Object.assign(this._lay, r.value);
+    } catch (e) { /* ältere Versionen: Standard */ }
+    this._roomSig = null;
+    if (this._built) this._update();
+  }
+  _save() {
+    this._hass.callWS({ type: 'frontend/set_user_data', key: 'zuhause-card', value: this._lay }).catch(() => {});
+  }
+
+  // ---------- Räume aus den Bereichen ----------
+  _areaOf(id) {
+    const h = this._hass, e = h.entities && h.entities[id];
+    if (!e || e.hidden || e.entity_category) return null;
+    if (e.area_id) return e.area_id;
+    const d = e.device_id && h.devices && h.devices[e.device_id];
+    return d ? d.area_id : null;
+  }
+  _rooms() {
+    const h = this._hass, st = h.states, areas = h.areas || {};
+    const by = {};
+    const add = (a, kind, s) => { if (!a || !areas[a]) return; (by[a] = by[a] || { id: a, name: areas[a].name, light: [], cover: [], climate: [], sw: [], scene: [] })[kind].push(s); };
+    const all = Object.values(st);
+    // Lichter, die schon in einer Hue-Gruppe stecken, nicht einzeln zeigen
+    const inGroup = new Set();
+    all.forEach(s => { if (s.entity_id.startsWith('light.') && s.attributes.is_hue_group) (s.attributes.entity_id || []).forEach(x => inGroup.add(x)); });
+    all.forEach(s => {
+      const id = s.entity_id, dom = id.split('.')[0];
+      if (!['light', 'cover', 'climate', 'switch'].includes(dom)) return;
+      const a = this._areaOf(id); if (!a) return;
+      if (dom === 'light') { if (!inGroup.has(id)) add(a, 'light', s); }
+      else if (dom === 'switch') { if (!/sirene|alarm/i.test(s.attributes.friendly_name || id)) add(a, 'sw', s); }
+      else add(a, dom, s);
     });
-    const used = new Set(out.map(m => m.id).filter(Boolean));
-    const free = x => !used.has(x) && !keys.some(k => x.includes(k));
-    const take = (m, id) => { m.id = id; m.name = st[id].attributes.friendly_name || m.name; m.auto = true; used.add(id); };
-    out.forEach(m => {
-      if (m.id || !m.brand) return;
-      const b = m.brand.toLowerCase();
-      const id = all.find(x => {
-        if (!free(x)) return false;
-        const a = st[x].attributes;
-        const txt = (x + ' ' + (a.friendly_name || '') + ' ' + (a.attribution || '')).toLowerCase();
-        return txt.includes(b) || (b === 'blink' && txt.includes('immedia'));
+    // Hue-Szenen: Gruppenname passt zum Bereich oder zu einer Hue-Gruppe im Bereich
+    const scenes = all.filter(s => s.entity_id.startsWith('scene.') && s.attributes.group_name);
+    Object.values(by).forEach(r => {
+      const names = new Set([r.name.toLowerCase(), ...r.light.filter(l => l.attributes.is_hue_group).map(l => (l.attributes.friendly_name || '').trim().toLowerCase())]);
+      r.scene = scenes.filter(s => names.has(s.attributes.group_name.trim().toLowerCase()))
+        .sort((x, y) => (x.attributes.name || x.entity_id).localeCompare(y.attributes.name || y.entity_id));
+      const byName = (x, y) => (x.attributes.friendly_name || '').localeCompare(y.attributes.friendly_name || '');
+      r.light.sort((x, y) => (y.attributes.is_hue_group ? 1 : 0) - (x.attributes.is_hue_group ? 1 : 0) || byName(x, y));
+      r.cover.sort(byName); r.sw.sort(byName);
+    });
+    // Hat ein Raum eine Hue-Gruppe, die einzelnen Hue-Lampen weglassen
+    Object.values(by).forEach(r => {
+      if (r.light.some(l => l.attributes.is_hue_group)) r.light = r.light.filter(l => l.attributes.is_hue_group || (h.entities[l.entity_id] || {}).platform !== 'hue');
+    });
+    const list = Object.values(by);
+    const order = (this._lay && this._lay.order) || [];
+    list.sort((x, y) => {
+      const i = order.indexOf(x.id), j = order.indexOf(y.id);
+      if (i < 0 && j < 0) return x.name.localeCompare(y.name);
+      return (i < 0 ? 1e3 : i) - (j < 0 ? 1e3 : j);
+    });
+    return list;
+  }
+
+  _nm(s, r) {
+    let n = (s.attributes.friendly_name || s.entity_id).trim().replace(/\s+/g, ' ');
+    const t = n.replace(/^(jalou?i?sie|wandthermostat|thermostat|stellantrieb)\s+/i, '');
+    if (t) n = t;
+    // Homematic doppelt "Gerät Kanal": "WohnzimmerGroß Wohnzimmer groß" -> "Wohnzimmer groß"
+    const w = n.split(' '), flat = x => x.join('').toLowerCase().replace(/[^a-zäöüß0-9]/g, '');
+    for (let i = 1; i < w.length; i++) {
+      const a = flat(w.slice(0, i)), b = flat(w.slice(i));
+      if (b.length > 3 && (a === b || a.endsWith(b) || lev(a, b) <= 2)) { n = w.slice(i).join(' '); break; }
+      if (a.length > 3 && b.endsWith(a)) { n = w.slice(0, i).join(' '); break; }
+    }
+    // Raumname vorne weglassen, wenn danach noch etwas übrig bleibt
+    if (r && n.toLowerCase().startsWith(r.name.toLowerCase() + ' ') && /[a-zäöü]{3}/i.test(n.slice(r.name.length + 1))) n = n.slice(r.name.length + 1);
+    return n;
+  }
+  _posTxt(v) { return v <= 0 ? 'Zu' : v >= 100 ? 'Auf' : `${v} %`; }
+  _pct(s) { return s.attributes.brightness != null ? Math.round(s.attributes.brightness / 2.55) : null; }
+  _boosting(s) { return s.attributes.preset_mode === 'boost'; }
+  _canBoost(s) { return (s.attributes.preset_modes || []).includes('boost'); }
+
+  // Boost-Restzeit: Start merkt sich die Karte, Dauer stellst du bei "Anordnen" ein
+  _boostInfo(list) {
+    const run = list.filter(x => this._boosting(x));
+    if (!run.length) return null;
+    const lay = this._lay || { boost: {}, boost_min: 30 };
+    let changed = false;
+    run.forEach(x => { if (!lay.boost[x.entity_id]) { lay.boost[x.entity_id] = Date.now(); changed = true; } });
+    if (changed && this._lay) this._save();
+    const start = Math.max(...run.map(x => lay.boost[x.entity_id]));
+    const left = Math.ceil((start + lay.boost_min * 60000 - Date.now()) / 60000);
+    return left > 0 ? `noch ${left} min` : 'läuft';
+  }
+  _cleanBoost() {
+    if (!this._lay) return;
+    let ch = false;
+    Object.keys(this._lay.boost).forEach(id => { const s = this._s(id); if (!s || !this._boosting(s)) { delete this._lay.boost[id]; ch = true; } });
+    if (ch) this._save();
+  }
+  _startBoost(ids) {
+    ids.forEach(id => { this._lay.boost[id] = Date.now(); });
+    this._save();
+    this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'boost' });
+  }
+
+  _renderRooms() {
+    const k = this._k;
+    if (!k.rooms) return;
+    const rooms = this._rooms(), lay = this._lay || { hidden: [] }, arr = !!this._arrange;
+    this._roomList = rooms;
+    this._cleanBoost();
+    const allClim = rooms.flatMap(r => r.climate).filter(x => this._canBoost(x));
+    const allBoost = this._boostInfo(allClim);
+    const quick = `<button class="qb" data-q="close">${svg('blind')} Alle Jalousien zu</button><button class="qb" data-q="open">${svg('blind')} Alle auf</button>`
+      + `<button class="qb" data-q="off">${svg('bulb')} Alle Lichter aus</button>`
+      + (allClim.length ? `<button class="qb ${allBoost ? 'on' : ''}" data-q="boost">${svg('heat')} ${allBoost ? 'Boost ' + allBoost + ' · verlängern' : 'Boost für alle'}</button>` : '');
+    const hint = arr ? `<div class="hint">Pfeile verschieben eine Kachel, das Auge blendet sie aus.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>` : '';
+    let html = '';
+    const vis = rooms.filter(r => arr || !lay.hidden.includes(r.id));
+    vis.forEach(r => {
+      const temps = r.climate.map(x => x.attributes.current_temperature).filter(v => v != null);
+      const t = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;
+      const lo = r.light.filter(x => x.state === 'on').length + r.sw.filter(x => x.state === 'on').length;
+      const pos = x => x.attributes.current_position != null ? x.attributes.current_position : x.state === 'closed' ? 0 : 100;
+      const cz = r.cover.filter(x => pos(x) <= 0).length, ca = r.cover.filter(x => pos(x) >= 100).length;
+      const bi = this._boostInfo(r.climate);
+      const pills = [];
+      if (r.light.length || r.sw.length) pills.push(`<span class="pill ${lo ? '' : 'off'}">${lo ? lo + ' an' : 'Licht aus'}</span>`);
+      if (r.cover.length) pills.push(`<span class="pill off">${ca === r.cover.length ? 'Jalousie auf' : cz === r.cover.length ? 'Jalousie zu' : 'Jalousie teils'}</span>`);
+      if (bi) pills.push(`<span class="pill warn">Boost ${bi}</span>`);
+      const hid = lay.hidden.includes(r.id);
+      html += `<div class="rt ${hid ? 'hid' : ''}" role="button" tabindex="0" data-room="${r.id}" aria-expanded="${!arr && this._open === r.id}"><b>${r.name}</b>`
+        + (t != null ? `<span class="v num">${de(t, 1)}<small> °C</small></span>` : '')
+        + `<span class="m">${pills.join('')}</span>`
+        + (arr ? `<span class="mv"><button data-mv="${r.id}|-1" aria-label="${r.name} nach vorne">‹</button><button data-mv="${r.id}|1" aria-label="${r.name} nach hinten">›</button><button data-hide="${r.id}" aria-label="${r.name} aus- oder einblenden">${svg('eye')}</button></span>` : '')
+        + `</div>`;
+      if (!arr && this._open === r.id) html += `<div class="rp">${this._roomPanel(r)}</div>`;
+    });
+    if (!rooms.length) html = '<p class="sub">Noch keine Bereiche mit Geräten gefunden. Ordne Lichter, Jalousien und Thermostate in Home Assistant einem Bereich zu.</p>';
+    const sig = quick + hint + html;
+    if (sig === this._roomSig || (this._busy && Date.now() < this._busy)) return;
+    this._roomSig = sig;
+    k.quick.innerHTML = quick; k.ahint.innerHTML = hint; k.rooms.innerHTML = html;
+    const ab = this.shadowRoot.querySelector('[data-arrange]');
+    ab.setAttribute('aria-pressed', arr); ab.textContent = arr ? '✓ Fertig' : '↕ Anordnen';
+  }
+
+  _roomPanel(r) {
+    let h = '';
+    const row = (ico, id, name, sub, ctl, extra = '') => `<div class="row" style="flex-wrap:wrap"><div class="ico">${svg(ico)}</div><div class="txt" data-more="${id}"><b>${name}</b><span>${sub}</span></div>${ctl}${extra}</div>`;
+    const tg = s => `<button class="tg" role="switch" aria-label="${s.attributes.friendly_name}" aria-checked="${s.state === 'on'}" data-toggle="${s.entity_id}"></button>`;
+    if (r.light.length || r.sw.length) {
+      h += '<div class="sect">Licht</div>';
+      r.light.forEach(s => {
+        const p = this._pct(s), dimm = (s.attributes.supported_color_modes || []).some(m => m !== 'onoff');
+        const sub = s.state === 'on' ? (p != null ? `An · ${p} %` : 'An') : s.state === 'off' ? 'Aus' : 'nicht erreichbar';
+        h += row('bulb', s.entity_id, this._nm(s, r), sub, tg(s),
+          dimm && s.state === 'on' ? `<input type="range" class="dim" min="1" max="100" value="${p || 100}" data-dim="${s.entity_id}" aria-label="${this._nm(s, r)} dimmen">` : '');
       });
-      if (id) take(m, id);
-    });
-    out.forEach(m => { if (m.id || !m.brand) return; const id = all.find(free); if (id) take(m, id); });
-    // übrige Kameras anhängen, Marke von den automatisch zugeordneten übernehmen
-    const auto = out.find(m => m.auto);
-    all.filter(free).forEach(id => out.push({ name: st[id].attributes.friendly_name || id, brand: auto ? auto.brand : '', id }));
-    return out;
+      r.sw.forEach(s => { h += row('plug', s.entity_id, this._nm(s, r), s.state === 'on' ? 'An' : s.state === 'off' ? 'Aus' : 'nicht erreichbar', tg(s)); });
+    }
+    if (r.scene.length) h += `<div class="sect">Szenen</div><div class="scw" style="margin-top:6px">${r.scene.map(s => `<button class="scb" type="button" data-scene="${s.entity_id}">${s.attributes.name || s.attributes.friendly_name}</button>`).join('')}</div>`;
+    if (r.cover.length) {
+      h += '<div class="sect">Jalousien</div>';
+      r.cover.forEach(s => {
+        const pos = s.attributes.current_position, setp = (s.attributes.supported_features || 0) & 4;
+        const sub = s.state === 'opening' ? 'fährt hoch' : s.state === 'closing' ? 'fährt runter' : pos != null ? this._posTxt(pos) : s.state === 'closed' ? 'Zu' : s.state === 'open' ? 'Auf' : 'nicht erreichbar';
+        h += row('blind', s.entity_id, this._nm(s, r), sub,
+          `<span class="cb"><button data-cv="close|${s.entity_id}">Zu</button><button data-cv="stop|${s.entity_id}">Stop</button><button data-cv="open|${s.entity_id}">Auf</button></span>`,
+          setp && pos != null ? `<input type="range" class="pos" min="0" max="100" step="5" value="${pos}" data-pos="${s.entity_id}" aria-label="${this._nm(s, r)} Position">` : '');
+      });
+    }
+    if (r.climate.length) {
+      h += '<div class="sect">Heizung</div>';
+      const bc = r.climate.filter(x => this._canBoost(x)), bi = this._boostInfo(r.climate);
+      r.climate.forEach(s => {
+        const a = s.attributes;
+        const sub = [a.temperature != null ? `Soll ${de(a.temperature, 1)} °C` : '', a.current_humidity != null ? `${Math.round(a.current_humidity)} % Feuchte` : ''].filter(Boolean).join(' · ');
+        h += row('heat', s.entity_id, this._nm(s, r), sub, `<span class="num" style="font-family:var(--display);font-weight:600">${a.current_temperature != null ? de(a.current_temperature, 1) + ' °C' : '–'}</span>`);
+      });
+      if (bc.length) h += `<div class="row"><div class="txt"><b>Boost</b><span>${bi ? 'läuft, ' + bi : 'aus'}</span></div><button class="bst ${bi ? 'on' : ''}" data-boost="${r.id}">${bi ? 'Verlängern' : 'Boost starten'}</button>${bi ? `<button class="bst" data-boostoff="${r.id}">Beenden</button>` : ''}</div>`;
+    }
+    return h || '<p class="sub">Keine steuerbaren Geräte in diesem Bereich.</p>';
+  }
+
+  _roomClick(e) {
+    const t = e.target.closest('button,[data-room]'); if (!t) return false;
+    const d = t.dataset, h = this._hass, rooms = this._roomList || [];
+    const room = id => rooms.find(r => r.id === id);
+    const done = () => { this._roomSig = null; this._busy = 0; this._renderRooms(); return true; };
+    if (!this._lay && (d.mv || d.hide || d.boost || d.q)) return true;
+    if (t.hasAttribute('data-arrange')) { this._arrange = !this._arrange; return done(); }
+    if (d.mv) {
+      const [id, st] = d.mv.split('|');
+      const ids = rooms.map(r => r.id), i = ids.indexOf(id), j = i + +st;
+      if (j >= 0 && j < ids.length) { ids.splice(i, 1); ids.splice(j, 0, id); }
+      this._lay.order = ids; this._save(); return done();
+    }
+    if (d.hide) {
+      const hd = this._lay.hidden;
+      this._lay.hidden = hd.includes(d.hide) ? hd.filter(x => x !== d.hide) : [...hd, d.hide];
+      this._save(); return done();
+    }
+    if (d.room) { if (!this._arrange) this._open = this._open === d.room ? null : d.room; return done(); }
+    if (d.cv) { const [a, id] = d.cv.split('|'); h.callService('cover', a + '_cover', { entity_id: id }); return true; }
+    if (d.boost) { const r = room(d.boost); if (r) this._startBoost(r.climate.filter(x => this._canBoost(x)).map(x => x.entity_id)); return done(); }
+    if (d.boostoff) {
+      const ids = (room(d.boostoff) || { climate: [] }).climate.filter(x => this._boosting(x)).map(x => x.entity_id);
+      if (ids.length) h.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'none' });
+      return true;
+    }
+    if (d.q) {
+      const all = k => rooms.filter(r => !this._lay.hidden.includes(r.id)).flatMap(r => r[k]).map(x => x.entity_id);
+      if (d.q === 'close' || d.q === 'open') { const ids = all('cover'); if (ids.length) h.callService('cover', d.q + '_cover', { entity_id: ids }); }
+      if (d.q === 'off') { const ids = all('light'); if (ids.length) h.callService('light', 'turn_off', { entity_id: ids }); }
+      if (d.q === 'boost') { const ids = rooms.flatMap(r => r.climate).filter(x => this._canBoost(x)).map(x => x.entity_id); if (ids.length) this._startBoost(ids); return done(); }
+      return true;
+    }
+    if (d.arm) { this._armAsk = d.arm; this._renderAlarm(); return true; }
+    if (d.armNo !== undefined) { this._armAsk = null; this._renderAlarm(); return true; }
+    if (d.armYes !== undefined) { this._doArm(this._armAsk === 'on'); this._armAsk = null; this._renderAlarm(); return true; }
+    return false;
+  }
+
+  // ---------- Alarmanlage ----------
+  _alarmEnt() {
+    const c = this._cfg, st = this._hass.states, all = Object.values(st);
+    const nm = s => (s.attributes.friendly_name || '').trim();
+    const find = (doms, re) => { const s = all.find(x => doms.includes(x.entity_id.split('.')[0]) && re.test(nm(x))); return s ? s.entity_id : null; };
+    return {
+      on: c.alarm_on || find(['button', 'script'], /^(alarm(anlage)? )?(sch(ä|ae)rfen|scharf schalten)$/i),
+      off: c.alarm_off || find(['button', 'script'], /^(alarm(anlage)? )?(entsch(ä|ae)rfen|unscharf( schalten)?)$/i),
+      state: c.alarm_state || find(['switch', 'input_boolean', 'binary_sensor', 'select', 'sensor', 'alarm_control_panel'], /^alarm(anlage)?( scharf| status| zustand)?$/i),
+    };
+  }
+  _armed(a) {
+    const s = this._s(a.state); if (!s) return null;
+    const v = String(s.state).toLowerCase();
+    if (v === 'unavailable' || v === 'unknown') return null;
+    return /^(on|true|scharf|armed|armed_.*|ein|an)$/.test(v);
+  }
+  _doArm(on) {
+    const a = this._alarmEnt(), h = this._hass, id = on ? a.on : a.off;
+    if (id) { const dom = id.split('.')[0]; h.callService(dom, dom === 'button' ? 'press' : 'turn_on', { entity_id: id }); return; }
+    if (a.state && /^(switch|input_boolean)\./.test(a.state)) h.callService('homeassistant', on ? 'turn_on' : 'turn_off', { entity_id: a.state });
+    if (a.state && a.state.startsWith('alarm_control_panel.')) h.callService('alarm_control_panel', on ? 'alarm_arm_away' : 'alarm_disarm', { entity_id: a.state });
+  }
+  _renderAlarm() {
+    const el = this._k.alarm; if (!el) return;
+    const a = this._alarmEnt(), armed = this._armed(a);
+    const can = a.on || a.off || (a.state && /^(switch|input_boolean|alarm_control_panel)\./.test(a.state));
+    let html;
+    if (!can && armed === null) {
+      html = `<div class="alarm"><div class="st">${svg('lock')}<div><b>Alarmanlage</b><span>noch nicht verbunden, kommt aus der Homematic-Zentrale</span></div></div></div>`;
+    } else {
+      const ask = this._armAsk ? `<div class="cf">${this._armAsk === 'on' ? 'Wirklich scharf schalten?' : 'Wirklich unscharf schalten?'}<button class="y" data-arm-yes>Ja</button><button data-arm-no>Abbrechen</button></div>` : '';
+      html = `<div class="alarm ${armed ? 'on' : ''}"><div class="st">${svg(armed ? 'lock' : 'shield')}<div><b>Alarmanlage ${armed === null ? '' : armed ? 'scharf' : 'unscharf'}</b><span>${armed ? 'Sirene löst bei Öffnen aus' : 'Antippen zum Schalten'}</span></div></div>
+        <div class="ab"><button data-arm="on" ${armed ? 'disabled' : ''}>Scharf schalten</button><button class="off" data-arm="off" ${armed === false ? 'disabled' : ''}>Unscharf</button></div>${ask}</div>`;
+    }
+    if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; }
   }
 
   // Suchwort: find oder aus dem Namen (Haustür -> haustuer)
@@ -519,44 +827,16 @@ class ZuhauseCard extends HTMLElement {
     this._set('chOpen', open.length === 1 ? '1 Tür/Fenster offen' : `${open.length} Türen/Fenster offen`);
     this._set('chLights', lightsOn === 1 ? '1 Licht an' : `${lightsOn} Lichter an`);
 
-    // Räume
-    c.rooms.forEach((r, i) => {
-      const t = this._n(r.t), hu = this._n(r.h);
-      this._set('rt' + i, t === null ? '–' : de(t, 1));
-      this._set('rh' + i, hu === null ? '' : `${Math.round(hu)} % Luftfeuchte`);
-    });
-
-    // Hue-Szenen je Raum, automatisch gefunden
-    const rooms = (c.scene_rooms || []).map(room => [room, Object.values(this._hass.states)
-      .filter(s => s.entity_id.startsWith('scene.') && (s.attributes.group_name || '').toLowerCase() === room.toLowerCase())
-      .sort((a, b) => (a.attributes.name || a.entity_id).localeCompare(b.attributes.name || b.entity_id))]).filter(r => r[1].length);
-    const sk = rooms.map(r => r[1].map(s => s.entity_id).join()).join('|');
-    if (k.scenes.dataset.v !== sk) {
-      k.scenes.dataset.v = sk;
-      k.scenes.innerHTML = rooms.map(([room, list]) => `<div class="scn"><div class="scl">Szenen ${room}</div><div class="scw">${list.map(s =>
-        `<button class="scb" type="button" data-scene="${s.entity_id}">${s.attributes.name || s.attributes.friendly_name}</button>`).join('')}</div></div>`).join('');
-    }
-
-    // Schalter
-    c.switches.forEach((s, i) => {
-      const st = this._s(s.entity);
-      k['swt' + i].setAttribute('aria-checked', st && st.state === 'on' ? 'true' : 'false');
-      const d = k['swd' + i];
-      const dimmable = st && st.entity_id.startsWith('light.') && (st.attributes.supported_color_modes || []).some(m => m !== 'onoff');
-      const pct = st && st.attributes.brightness != null ? Math.round(st.attributes.brightness / 2.55) : null;
-      if (d) {
-        d.hidden = !(dimmable && st.state === 'on');
-        if (pct !== null && !d.dataset.drag) d.value = pct;
-      }
-      this._set('sws' + i, !st ? 'nicht gefunden' : st.state === 'on' ? (pct !== null ? `An · ${pct} %` : 'Eingeschaltet') : st.state === 'off' ? 'Ausgeschaltet' : 'nicht erreichbar');
-    });
+    // Räume und Alarmanlage
+    this._renderRooms();
+    this._renderAlarm();
 
     // Kameras
     this._cams.forEach((m, i) => {
       const s = this._s(m.id), v = k['cv' + i];
       if (s && s.attributes.entity_picture) {
         const src = s.attributes.entity_picture;
-        if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live${this._stream(m.id) ? '' : ' foto'}">${this._stream(m.id) ? 'LIVE' : 'FOTO'}</span>`; }
+        if (v.dataset.src !== src) { v.dataset.src = src; v.innerHTML = `<img src="${src}" alt="${m.name}"><span class="live">LIVE</span>`; }
         this._set('cs' + i, m.brand);
       } else {
         if (v.dataset.src !== '') { v.dataset.src = ''; v.innerHTML = svg('cam'); }

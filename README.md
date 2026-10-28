@@ -38,3 +38,11 @@ cameras:
 ```
 
 Ohne `entity` und `find` sucht die Karte nach dem Namen (Haustür -> camera.*haustuer*). Einträge mit `app: true` werden ausgeblendet. Es erscheint außerdem ein Hinweis „Es klingelt“, solange ein passender Besucher-Sensor (`binary_sensor.*haustuer*besucher*` bzw. `*visitor*`) an ist.
+
+## Räume (ab 2.0)
+
+Die Karte baut die Raum-Steuerung selbst aus den Bereichen in Home Assistant: Lichter (Hue-Gruppen statt Einzellampen), Schalter, Jalousien mit Positions-Slider, Thermostate mit Boost und die Hue-Szenen des Raums. Mit „Anordnen“ lassen sich Räume verschieben und ausblenden; das wird pro Benutzer in Home Assistant gespeichert. Dort steht auch die Boost-Dauer für die Restzeit-Anzeige.
+
+Alarmanlage: optional `alarm_on`, `alarm_off` (button/script) und `alarm_state`; sonst sucht die Karte nach Entitäten namens „Schärfen“, „Entschärfen“ bzw. „Alarmanlage“.
+
+Kameras: angezeigt werden nur Kameras mit Livebild.
