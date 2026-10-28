@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.6.1';
+const VERSION = '2.6.2';
 
 const DEFAULTS = {
   name: '',
@@ -590,7 +590,7 @@ class ZuhauseCard extends HTMLElement {
     all.forEach(s => {
       const id = s.entity_id, e = h.entities[id]; if (!e || !/homematic/.test(e.platform || '')) return;
       const d = e.device_id && h.devices && h.devices[e.device_id];
-      const n = (s.attributes.friendly_name || '').replace(devName(e), '').trim();
+      const n = (s.attributes.friendly_name || '').replace(devName(e), '').trim().replace(/^SV\s+/, '');
       if (id.startsWith('event.') && d && /RCV-50/i.test(d.model || '')) {
         if (!n || /^v?ch\d+$|sch(ä|ae)rfen|scharf/i.test(n)) return;
         const ca = String(s.attributes.channel_address || s.attributes.address || '');
@@ -899,7 +899,7 @@ class ZuhauseCard extends HTMLElement {
     }
     if (!this._hmEntry) return;
     const e = h.entities[id], d = e && e.device_id && h.devices && h.devices[e.device_id];
-    const name = (s.attributes.friendly_name || '').replace(d ? (d.name_by_user || d.name || '') : '', '').trim();
+    const name = (s.attributes.friendly_name || '').replace(d ? (d.name_by_user || d.name || '') : '', '').trim().replace(/^SV\s+/, '');
     h.callService('homematicip_local', 'set_variable_value', { entry_id: this._hmEntry, name, value: !on });
   }
 
