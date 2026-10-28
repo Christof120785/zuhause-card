@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 
 const DEFAULTS = {
   name: '',
@@ -796,9 +796,24 @@ class ZuhauseCard extends HTMLElement {
   _alarmKey() {
     const c = this._cfg, k = (this._lay && this._lay.alarm_key) || {};
     const svc = this._hass.services && this._hass.services.homematicip_local;
-    const on = c.alarm_key_on || k.on, off = c.alarm_key_off || k.off;
-    if (!svc || !svc.set_device_value || !(on || off)) return null;
-    return { addr: c.alarm_key_address || 'HmIP-RCV-1', on, off };
+    if (!svc || !svc.set_device_value) return null;
+    // Kanäle "Schärfen"/"Entschärfen" der virtuellen Fernbedienung suchen (Event-Entitäten)
+    const h = this._hass, found = {};
+    for (const s of Object.values(h.states)) {
+      if (!s.entity_id.startsWith('event.')) continue;
+      const e = h.entities && h.entities[s.entity_id], d = e && e.device_id && h.devices && h.devices[e.device_id];
+      if (!d || !/RCV-50/i.test(d.model || '')) continue;
+      const n = (s.attributes.friendly_name || '').replace(d.name_by_user || d.name || '', '').trim();
+      const kind = /entsch(ä|ae)rfen|unscharf/i.test(n) ? 'off' : /sch(ä|ae)rfen|scharf/i.test(n) ? 'on' : null;
+      if (!kind || found[kind]) continue;
+      const a = s.attributes, ca = String(a.channel_address || a.address || '');
+      const ch = +(ca.split(':')[1] || (s.entity_id.match(/_ch(\d+)/) || [])[1] || 0) || null;
+      found[kind] = { addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch };
+    }
+    const f = found.on || found.off;
+    const on = c.alarm_key_on || k.on || (found.on && found.on.ch), off = c.alarm_key_off || k.off || (found.off && found.off.ch);
+    if (!(on || off)) return null;
+    return { addr: c.alarm_key_address || (f && f.addr) || 'HmIP-RCV-1', on, off };
   }
   _armed(a) {
     const s = this._s(a.state);
