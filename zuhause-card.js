@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.4.3';
+const VERSION = '2.4.4';
 
 const DEFAULTS = {
   name: '',
@@ -520,7 +520,8 @@ class ZuhauseCard extends HTMLElement {
     const inGroup = new Set();
     all.forEach(s => { if (s.entity_id.startsWith('light.') && s.attributes.is_hue_group) (s.attributes.entity_id || []).forEach(x => inGroup.add(x)); });
     const nrm = x => (x || '').toLowerCase().replace(/ß/g, 'ss').replace(/[^a-zäöü0-9]/g, '');
-    const areaList = Object.values(areas).filter(x => nrm(x.name).length >= 4).sort((x, y) => nrm(y.name).length - nrm(x.name).length);
+    const FUNC = /^(alarm(anlage)?|licht|beleuchtung|heizung|jalousien?|rollladen|temperatur|zentrale|haussteuerung|sicherheit|klima|technik|system)$/;
+    const areaList = Object.values(areas).filter(x => nrm(x.name).length >= 4 && !FUNC.test(nrm(x.name))).sort((x, y) => nrm(y.name).length - nrm(x.name).length);
     // Schalter nur von Geräte-Integrationen (keine Auto-, Wallbox- oder Kamera-Einstellungen)
     const swOk = s => {
       const pf = (h.entities[s.entity_id] || {}).platform || '';
@@ -531,6 +532,8 @@ class ZuhauseCard extends HTMLElement {
       const id = s.entity_id, dom = id.split('.')[0];
       if (!['light', 'cover', 'climate', 'switch'].includes(dom)) return;
       let a = this._areaOf(id); if (a === false) return;
+      // Gewerke wie "Alarmanlage" oder "Licht" sind keine Räume
+      if (a && areas[a] && FUNC.test(nrm(areas[a].name))) a = null;
       // ohne Bereich: über den Namen zuordnen ("Wandthermostat Wohnzimmer 1" -> Wohnzimmer)
       if (!a) { const n = nrm(s.attributes.friendly_name); const m = areaList.find(x => n.includes(nrm(x.name))); if (!m) return; a = m.area_id; }
       if (dom === 'light') { if (!inGroup.has(id)) add(a, 'light', s); }
