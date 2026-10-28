@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.9.2';
+const VERSION = '2.10.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -22,13 +22,13 @@ if (!window.__zuhauseUpd) {
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
   energy: ['Energiefluss', 7, 1], wb: ['Wallbox', 5, 1], sec: ['Sicherheit', 4, 1], home: ['Räume', 8, 2],
-  cams: ['Kameras', 4, 1], wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2]
+  cams: ['Kameras', 4, 1], wx: ['Wetter', 8, 1], waste: ['Müllabfuhr', 4, 1], rain: ['Regenradar', 8, 1], hist: ['Energiebilanz', 12, 2]
 };
 
 const DEFAULTS = {
   name: '',
   images: '/local/dashboard/',
-  weather: '', pv: '', grid_in: '', grid_out: '',
+  weather: '', waste: '', radar: 'https://www.wetteronline.de/regenradar/friedland-niedersachsen?homemark=true', pv: '', grid_in: '', grid_out: '',
   wallbox: '', wallbox_release: '', car_soc: '', car_power: '',
   batteries: [], contacts: [], rooms: [], switches: [], scene_rooms: [], cameras: [],
 };
@@ -264,6 +264,9 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .cf button{all:unset;cursor:pointer;border-radius:9px;padding:6px 11px;font-weight:700;background:var(--card)}
 .cf .y{background:#c83a3a;color:#fff}
 /* cameras */
+.bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
+.radar{width:100%;height:340px;border:0;border-radius:14px;background:var(--tile);display:block}
+.radl{display:inline-block;margin-top:8px;font-size:13px;color:var(--grid);text-decoration:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
 .cam .view{aspect-ratio:16/9;max-width:100%;position:relative;display:grid;place-items:center;background:var(--house-soft);color:var(--muted)}
@@ -319,6 +322,7 @@ class ZuhauseCard extends HTMLElement {
     this.classList.toggle('dark', !!(hass.themes && hass.themes.darkMode));
     this._update();
     if (!this._fcSub && hass.connection && this._cfg.weather && hass.states[this._cfg.weather]) this._subForecast();
+    if (!this._wasteT || Date.now() - this._wasteT > 30 * 60 * 1000) { this._wasteT = Date.now(); this._loadWaste(); }
     if (!this._histT || Date.now() - this._histT > 15 * 60 * 1000) { this._histT = Date.now(); this._loadHistory(); }
   }
 
@@ -433,6 +437,19 @@ class ZuhauseCard extends HTMLElement {
         <div class="fc" data-k="fc"></div>
       </section>
 
+      <section class="card waste bins" data-sec="waste">
+        <div class="eyebrow"><span>Müllabfuhr</span><span>nächste Termine</span></div>
+        <h2 data-k="wah">Müllabfuhr</h2><p class="sub" data-k="was"></p>
+        <div data-k="wal"></div>
+      </section>
+
+      <section class="card rain" data-sec="rain">
+        <div class="eyebrow"><span>Regenradar</span><span>WetterOnline</span></div>
+        <h2>Regen in deiner Nähe</h2>
+        <iframe class="radar" src="${c.radar}" loading="lazy" title="Regenradar"></iframe>
+        <a class="radl" href="${c.radar}" target="_blank" rel="noopener">Im großen Radar öffnen</a>
+      </section>
+
       <section class="card hist chart" data-sec="hist">
         <div class="eyebrow"><span>Energie</span><span>Bilanz und Prognose</span></div>
         <h2>Erzeugung und Verbrauch</h2>
@@ -511,6 +528,7 @@ class ZuhauseCard extends HTMLElement {
     });
     this._roomSig = null;
     this._built = true;
+    if (this._waste) this._renderWaste();
   }
 
   // Kameras: feste ID oder Suche per Stichwort (find/Name). Angezeigt werden nur Kameras mit Livebild.
@@ -775,6 +793,45 @@ class ZuhauseCard extends HTMLElement {
       b.innerHTML = arr ? `<span>${TILES[x][0]}</span><button data-tmv="${x}|-1" aria-label="${TILES[x][0]} nach oben">↑</button><button data-tmv="${x}|1" aria-label="${TILES[x][0]} nach unten">↓</button>`
         + (x === 'home' ? '' : `<button data-thide="${x}">${svg('eye')} ${hid ? 'Einblenden' : 'Ausblenden'}</button>`) : '';
     });
+  }
+
+  // ---------- Müllabfuhr aus einem Kalender (z. B. Waste Collection Schedule) ----------
+  _wasteCals() {
+    const w = this._cfg.waste;
+    if (w) return [].concat(w);
+    return Object.keys(this._hass.states).filter(id => id.startsWith('calendar.')
+      && /müll|muell|abfall|waste|tonne|entsorg/i.test(id + ' ' + (this._hass.states[id].attributes.friendly_name || '')));
+  }
+  _binColor(n) {
+    n = n.toLowerCase();
+    return /gelb|wertstoff|verpack/.test(n) ? '#e0b000' : /bio|grün|gruen|organ/.test(n) ? '#4a9a5f'
+      : /papier|blau/.test(n) ? '#3f78c4' : /rest|grau|schwarz/.test(n) ? '#5b6470' : '#8a93a0';
+  }
+  async _loadWaste() {
+    const cals = this._wasteCals(), a = new Date(), b = new Date(a.getTime() + 45 * 864e5);
+    a.setHours(0, 0, 0, 0);
+    try {
+      const res = await Promise.all(cals.map(id => this._hass.callApi('GET', `calendars/${id}?start=${a.toISOString()}&end=${b.toISOString()}`)));
+      const ev = res.flat().map(e => ({ n: e.summary, d: new Date((e.start.date || e.start.dateTime || '').slice(0, 10) + 'T00:00:00') }))
+        .filter(e => !isNaN(e.d)).sort((x, y) => x.d - y.d);
+      this._waste = ev;
+    } catch (e) { this._waste = this._waste || []; }
+    this._renderWaste();
+  }
+  _renderWaste() {
+    const k = this._k; if (!k.wal) return;
+    const ev = this._waste || [], today = new Date(); today.setHours(0, 0, 0, 0);
+    // pro Sorte nur der nächste Termin
+    const seen = new Set(), next = ev.filter(e => !seen.has(e.n) && seen.add(e.n)).slice(0, 5);
+    if (!this._wasteCals().length) { this._set('wah', 'Noch kein Abfallkalender'); this._set('was', 'Wird angezeigt, sobald der Kalender in Home Assistant ist'); k.wal.innerHTML = ''; return; }
+    const days = e => Math.round((e.d - today) / 864e5);
+    const lab = e => { const n = days(e); return n === 0 ? 'heute' : n === 1 ? 'morgen' : null; };
+    const f = next[0];
+    this._set('wah', f ? (days(f) <= 1 ? `${lab(f) === 'heute' ? 'Heute' : 'Morgen'}: ${f.n}` : 'Nächste Abfuhr') : 'Keine Termine');
+    this._set('was', f ? (days(f) === 1 ? 'Heute Abend rausstellen' : days(f) === 0 ? 'Heute wird abgeholt' : `${f.n} am ${f.d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}`) : '');
+    const bin = c => `<svg class="bin" viewBox="0 0 34 40"><rect x="4" y="6" width="26" height="4" rx="2" fill="${c}"/><rect x="12" y="2" width="10" height="4" rx="2" fill="${c}"/><path d="M7 12h20l-2 26H9z" fill="${c}"/><path d="M13 17v16M17 17v16M21 17v16" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>`;
+    const h = next.map(e => `<div class="row">${bin(this._binColor(e.n))}<div class="txt"><b>${e.n}</b><div class="s" style="color:var(--muted);font-size:12px">${e.d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}</div></div>${lab(e) ? `<span class="pill warn">${lab(e)}</span>` : ''}</div>`).join('');
+    if (k.wal.dataset.v !== h) { k.wal.dataset.v = h; k.wal.innerHTML = h; }
   }
 
   _renderRooms() {
