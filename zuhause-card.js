@@ -821,8 +821,8 @@ class ZuhauseCard extends HTMLElement {
   }
   _binColor(n) {
     n = n.toLowerCase();
-    return /gelb|wertstoff|verpack/.test(n) ? '#e0b000' : /bio|grün|gruen|organ/.test(n) ? '#4a9a5f'
-      : /papier|blau/.test(n) ? '#3f78c4' : /rest|grau|schwarz/.test(n) ? '#5b6470' : '#8a93a0';
+    return /gelb|wertstoff|verpack/.test(n) ? '#e0b000' : /bio|kompost|grün|gruen|organ/.test(n) ? '#4a9a5f'
+      : /papier|altpapier|blau/.test(n) ? '#3f78c4' : /rest|grau|schwarz/.test(n) ? '#5b6470' : '#8a93a0';
   }
   async _loadWaste() {
     const cals = this._wasteCals(), a = new Date(), b = new Date(a.getTime() + 45 * 864e5);
