@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.6.0';
+const VERSION = '2.6.1';
 
 const DEFAULTS = {
   name: '',
@@ -578,9 +578,9 @@ class ZuhauseCard extends HTMLElement {
         if (!n || /^v?ch\d+$|sch(ä|ae)rfen|scharf/i.test(n)) return;
         const ca = String(s.attributes.channel_address || s.attributes.address || '');
         const ch = +(ca.split(':')[1] || (id.match(/_ch(\d+)/) || [])[1] || 0);
-        if (ch) addFn(n, { kind: 'key', entity_id: id, name: n, addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch, state: s.state });
+        if (ch) addFn(n, { kind: 'key', entity_id: id, name: n, attributes: { friendly_name: n }, addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch, state: s.state });
       } else if (/^(binary_sensor|switch|sensor)\./.test(id) && /gesperrt|sperre/i.test(n)) {
-        addFn(n, { kind: 'var', entity_id: id, name: n, on: /^(on|true|wahr|ja)$/i.test(s.state), state: s.state });
+        addFn(n, { kind: 'var', entity_id: id, name: n, attributes: { friendly_name: n }, on: /^(on|true|wahr|ja)$/i.test(s.state), state: s.state });
       }
     });
     // Bereiche zusammenlegen: selbst gewählt (Anordnen) oder automatisch,
@@ -645,6 +645,7 @@ class ZuhauseCard extends HTMLElement {
     Object.values(by).forEach(r => ['light', 'cover', 'climate', 'sw', 'fn'].forEach(k => {
       r[k] = r[k].filter(x => {
         const to = dev[x.entity_id] && dev[x.entity_id].r;
+        if (to === '__hide') return false;
         if (!to || to === r.id || !by[to]) return true;
         by[to][k].push(x); return false;
       });
@@ -754,12 +755,14 @@ class ZuhauseCard extends HTMLElement {
 
   // Anordnen: Geräte eines Raums umbenennen oder in einen anderen Raum legen
   _editPanel(r, rooms) {
-    const all = [...r.light, ...r.sw, ...r.cover, ...r.climate];
+    const all = [...r.light, ...r.sw, ...r.fn, ...r.cover, ...r.climate];
+    const hid = Object.entries((this._lay && this._lay.dev) || {}).filter(([, v]) => v.r === '__hide').map(([k]) => k);
     return `<div class="sect">Geräte in ${r.name}</div>` + all.map(s => {
       const ic = s.entity_id.startsWith('cover.') ? 'blind' : s.entity_id.startsWith('climate.') ? 'heat' : s.entity_id.startsWith('switch.') ? 'plug' : 'bulb';
       return `<div class="row" style="flex-wrap:wrap"><div class="ico">${svg(ic)}</div><div class="txt"><input class="rn" data-dname="${s.entity_id}" value="${this._nm(s, r).replace(/"/g, '&quot;')}" aria-label="Gerätename"><span>${s.attributes.friendly_name || s.entity_id}</span></div>
-        <select class="mg" data-droom="${s.entity_id}" aria-label="Raum">${rooms.map(o => `<option value="${o.id}" ${o.id === r.id ? 'selected' : ''}>${o.name}</option>`).join('')}</select></div>`;
-    }).join('') + '<p class="sub" style="margin:8px 0 0">Name ändern und Enter drücken. Leeres Feld stellt den Originalnamen wieder her.</p>';
+        <select class="mg" data-droom="${s.entity_id}" aria-label="Raum">${rooms.map(o => `<option value="${o.id}" ${o.id === r.id ? 'selected' : ''}>${o.name}</option>`).join('')}<option value="__hide">ausblenden</option></select></div>`;
+    }).join('') + '<p class="sub" style="margin:8px 0 0">Name ändern und Enter drücken. Leeres Feld stellt den Originalnamen wieder her. „ausblenden“ nimmt ein Gerät vom Dashboard.</p>'
+      + (hid.length ? `<div class="sect">Ausgeblendet</div>` + hid.map(id => `<div class="row"><div class="txt"><b>${(this._s(id) && this._s(id).attributes.friendly_name) || id}</b></div><select class="mg" data-droom="${id}" aria-label="Raum"><option value="__hide" selected>ausgeblendet</option>${rooms.map(o => `<option value="${o.id}">wieder in ${o.name}</option>`).join('')}</select></div>`).join('') : '');
   }
 
   _mergeSel(id, cur, rooms) {
@@ -783,10 +786,11 @@ class ZuhauseCard extends HTMLElement {
     if (r.fn.length) {
       h += '<div class="sect">Funktionen</div>';
       r.fn.forEach(f => {
-        if (f.kind === 'var') h += row('lock', f.entity_id, f.name, f.on ? 'An' : 'Aus', `<button class="tg" role="switch" aria-label="${f.name}" aria-checked="${f.on}" data-hmvar="${f.entity_id}"></button>`);
+        const fnm = this._nm(f, r);
+        if (f.kind === 'var') h += row('lock', f.entity_id, fnm, f.on ? 'An' : 'Aus', `<button class="tg" role="switch" aria-label="${f.name}" aria-checked="${f.on}" data-hmvar="${f.entity_id}"></button>`);
         else {
           const t = Date.parse(f.state), when = isNaN(t) ? '' : ' · zuletzt ' + new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
-          h += row('plug', f.entity_id, f.name, 'Taste der Zentrale' + when, `<button class="bst" data-vkey="${f.addr}|${f.ch}">Drücken</button>`);
+          h += row('plug', f.entity_id, fnm, 'Taste der Zentrale' + when, `<button class="bst" data-vkey="${f.addr}|${f.ch}">Drücken</button>`);
         }
       });
     }
