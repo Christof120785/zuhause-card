@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.10.0';
+const VERSION = '2.11.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -39,13 +39,13 @@ if (!window.__zuhauseUpd) {
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
   energy: ['Energiefluss', 7, 1], wb: ['Wallbox', 5, 1], sec: ['Sicherheit', 4, 1], home: ['Räume', 8, 2],
-  cams: ['Kameras', 4, 1], wx: ['Wetter', 8, 1], waste: ['Müllabfuhr', 4, 1], rain: ['Regenradar', 8, 1], hist: ['Energiebilanz', 12, 2]
+  cams: ['Kameras', 4, 1], wx: ['Wetter', 8, 1], waste: ['Müllabfuhr', 4, 1], hist: ['Energiebilanz', 12, 2]
 };
 
 const DEFAULTS = {
   name: '',
   images: '/local/dashboard/',
-  weather: '', waste: '', radar: 'https://www.wetteronline.de/regenradar/friedland-niedersachsen?homemark=true', pv: '', grid_in: '', grid_out: '',
+  weather: '', waste: '', pv: '', grid_in: '', grid_out: '',
   wallbox: '', wallbox_release: '', car_soc: '', car_power: '',
   batteries: [], contacts: [], rooms: [], switches: [], scene_rooms: [], cameras: [],
 };
@@ -282,8 +282,6 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .cf .y{background:#c83a3a;color:#fff}
 /* cameras */
 .bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
-.radar{width:100%;height:340px;border:0;border-radius:14px;background:var(--tile);display:block}
-.radl{display:inline-block;margin-top:8px;font-size:13px;color:var(--grid);text-decoration:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
 .cam .view{aspect-ratio:16/9;max-width:100%;position:relative;display:grid;place-items:center;background:var(--house-soft);color:var(--muted)}
@@ -299,6 +297,9 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .fc svg{width:24px;height:24px;display:block;margin:3px auto}
 /* Stundenwetter */
 .hrs{overflow-x:auto;margin:0 -4px 10px;padding:0 4px;scrollbar-width:thin}
+.rainw{display:flex;align-items:center;gap:8px;margin:2px 0 10px;padding:8px 12px;border-radius:12px;background:rgba(63,120,196,.14);color:var(--fg);font-size:14px}
+.rainw[hidden]{display:none}
+.rainw svg{width:26px;height:26px;flex:none}
 .hrs>svg{display:block;height:150px}
 .hrs text{font-family:var(--body);font-size:11.5px;fill:var(--muted)}
 .hrs .tt{font-size:13px;font-weight:600;fill:var(--fg)}
@@ -449,7 +450,7 @@ class ZuhauseCard extends HTMLElement {
 
       <section class="card wx" data-sec="wx">
         <div class="eyebrow"><span>Wetter</span><span>Vorhersage</span></div>
-        <h2>Heute und die nächsten Tage</h2><p class="sub" data-k="wxs"></p>
+        <h2>Heute und die nächsten Tage</h2><p class="sub" data-k="wxs"></p><div class="rainw" data-k="rainw" hidden></div>
         <div class="hrs" data-k="fch"></div>
         <div class="fc" data-k="fc"></div>
       </section>
@@ -460,12 +461,6 @@ class ZuhauseCard extends HTMLElement {
         <div data-k="wal"></div>
       </section>
 
-      <section class="card rain" data-sec="rain">
-        <div class="eyebrow"><span>Regenradar</span><span>WetterOnline</span></div>
-        <h2>Regen in deiner Nähe</h2>
-        <iframe class="radar" src="${c.radar}" loading="lazy" title="Regenradar"></iframe>
-        <a class="radl" href="${c.radar}" target="_blank" rel="noopener">Im großen Radar öffnen</a>
-      </section>
 
       <section class="card hist chart" data-sec="hist">
         <div class="eyebrow"><span>Energie</span><span>Bilanz und Prognose</span></div>
@@ -821,7 +816,7 @@ class ZuhauseCard extends HTMLElement {
   }
   _binColor(n) {
     n = n.toLowerCase();
-    return /gelb|wertstoff|verpack/.test(n) ? '#e0b000' : /bio|grün|gruen|organ/.test(n) ? '#4a9a5f'
+    return /gelb|wertstoff|verpack/.test(n) ? '#e0b000' : /bio|grün|gruen|organ|kompost/.test(n) ? '#4a9a5f' : /baum|strauch|grünschnitt/.test(n) ? '#8a6a3f'
       : /papier|blau/.test(n) ? '#3f78c4' : /rest|grau|schwarz/.test(n) ? '#5b6470' : '#8a93a0';
   }
   async _loadWaste() {
@@ -1378,8 +1373,25 @@ class ZuhauseCard extends HTMLElement {
         + (p ? `<text class="rp" x="${x}" y="114" text-anchor="middle">${Math.round(p)} %</text>` : (f.precipitation ? `<text class="rp" x="${x}" y="114" text-anchor="middle">${de(f.precipitation, 1)} mm</text>` : ''))
         + `<text x="${x}" y="134" text-anchor="middle">${i === 0 ? 'Jetzt' : d.getHours() === 0 ? DAYS[d.getDay()] : String(d.getHours()).padStart(2, '0') + ':00'}</text>`;
     });
+    this._rainWarn(fc);
     const html = `<svg viewBox="0 0 ${W} 142" width="${W}" role="img" aria-label="Wetter der nächsten 24 Stunden">${g}</svg>`;
     if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
+  }
+
+  // Hinweis, wenn in den nächsten Stunden Regen aufzieht
+  _rainWarn(fc) {
+    const k = this._k.rainw; if (!k) return;
+    const wet = f => /rain|pouring|lightning|hail|snow/.test(f.condition || '') || (f.precipitation_probability || 0) >= 50 || (f.precipitation || 0) >= 0.3;
+    const i = fc.slice(0, 12).findIndex(wet);
+    if (i < 0) { k.hidden = true; return; }
+    let j = i; while (j + 1 < fc.length && wet(fc[j + 1])) j++;
+    const hh = f => { const d = new Date(f.datetime); return (d.toDateString() !== new Date().toDateString() && d.getHours() >= 5 ? 'morgen ' : '') + d.getHours() + ' Uhr'; }, snow = /snow/.test(fc[i].condition || '');
+    const what = snow ? 'Schnee' : /lightning/.test(fc[i].condition || '') ? 'Gewitter' : 'Regen';
+    const from = i === 0 ? `${what} jetzt` : `${what} ab ${hh(fc[i])}`;
+    const to = j + 1 < fc.length ? `, bis etwa ${hh(fc[j + 1])}` : '';
+    const p = Math.max(...fc.slice(i, j + 1).map(f => f.precipitation_probability || 0));
+    k.innerHTML = `${wxIcon(fc[i].condition)}<span><b>${from}</b>${to}${p ? ` · ${Math.round(p)} %` : ''}</span>`;
+    k.hidden = false;
   }
 
   async _loadHistory() {
