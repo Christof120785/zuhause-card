@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 
 const DEFAULTS = {
   name: '',
@@ -441,6 +441,7 @@ class ZuhauseCard extends HTMLElement {
         this._save(); this._roomSig = null; this._busy = 0; this._renderRooms();
       }
       if (t.dataset.merge && this._lay) { this._lay.merge[t.dataset.merge] = t.value; this._save(); this._roomSig = null; this._renderRooms(); }
+      if (t.dataset.akey && this._lay) { const L = this._lay; L.alarm_key = L.alarm_key || {}; const v = parseInt(t.value, 10); if (v >= 1 && v <= 50) L.alarm_key[t.dataset.akey] = v; else delete L.alarm_key[t.dataset.akey]; this._save(); this._renderAlarm(); }
       if (t.dataset.boostmin) { const v = Math.max(1, Math.min(240, +t.value || 30)); this._lay.boost_min = v; this._save(); }
       if (t.dataset.dim || t.dataset.pos) this._busy = Date.now() + 1500;
     });
@@ -672,7 +673,8 @@ class ZuhauseCard extends HTMLElement {
     const quick = `<button class="qb" data-q="close">${svg('blind')} Alle Jalousien zu</button><button class="qb" data-q="open">${svg('blind')} Alle auf</button>`
       + `<button class="qb" data-q="off">${svg('bulb')} Alle Lichter aus</button>`
       + (allClim.length ? `<button class="qb ${allBoost ? 'on' : ''}" data-q="boost">${svg('heat')} ${allBoost ? 'Boost ' + allBoost + ' · verlängern' : 'Boost für alle'}</button>` : '');
-    const hint = arr ? `<div class="hint">Namen antippen zum Umbenennen. Pfeile verschieben, das Auge blendet aus, die Auswahl legt einen Raum in einen anderen. Raum antippen zeigt seine Geräte zum Umbenennen und Verschieben.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>` : '';
+    const hint = arr ? `<div class="hint">Namen antippen zum Umbenennen. Pfeile verschieben, das Auge blendet aus, die Auswahl legt einen Raum in einen anderen. Raum antippen zeigt seine Geräte zum Umbenennen und Verschieben.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>
+      <div class="hint">Alarmanlage über die virtuelle Fernbedienung der Zentrale: Tastennummer für Scharf <input type="number" min="1" max="50" data-akey="on" value="${(lay.alarm_key || {}).on || ''}" aria-label="Taste scharf"> und Unscharf <input type="number" min="1" max="50" data-akey="off" value="${(lay.alarm_key || {}).off || ''}" aria-label="Taste unscharf"></div>` : '';
     let html = '';
     const vis = rooms.filter(r => arr || !lay.hidden.includes(r.id));
     vis.forEach(r => {
@@ -803,8 +805,17 @@ class ZuhauseCard extends HTMLElement {
     return {
       on: c.alarm_on || find(['button', 'script'], /^(?!.*entsch).*(sch(ä|ae)rfen|scharf schalten)/i),
       off: c.alarm_off || find(['button', 'script'], /entsch(ä|ae)rfen|unscharf/i),
+      key: this._alarmKey(),
       state: c.alarm_state || find(['switch', 'input_boolean', 'binary_sensor', 'select', 'sensor', 'alarm_control_panel'], /^alarm(anlage)?( scharf| status| zustand)?$/i),
     };
+  }
+  // Virtuelle Fernbedienung der CCU (HmIP-RCV-50) direkt über homematicip_local drücken
+  _alarmKey() {
+    const c = this._cfg, k = (this._lay && this._lay.alarm_key) || {};
+    const svc = this._hass.services && this._hass.services.homematicip_local;
+    const on = c.alarm_key_on || k.on, off = c.alarm_key_off || k.off;
+    if (!svc || !svc.set_device_value || !(on || off)) return null;
+    return { addr: c.alarm_key_address || 'HmIP-RCV-1', on, off };
   }
   _armed(a) {
     const s = this._s(a.state);
@@ -812,7 +823,9 @@ class ZuhauseCard extends HTMLElement {
       // ohne Status: zuletzt gedrückter Knopf (Button-Zustand = Zeitpunkt)
       const t = id => { const x = this._s(id); const v = x && Date.parse(x.state); return isNaN(v) ? 0 : v || 0; };
       const on = t(a.on), off = t(a.off);
-      return on || off ? on > off : null;
+      if (on || off) return on > off;
+      const l = this._lay && this._lay.alarm_last;
+      return l ? !!l.on : null;
     }
     const v = String(s.state).toLowerCase();
     if (v === 'unavailable' || v === 'unknown') return null;
@@ -820,21 +833,33 @@ class ZuhauseCard extends HTMLElement {
   }
   _doArm(on) {
     const a = this._alarmEnt(), h = this._hass, id = on ? a.on : a.off;
+    if (this._lay) { this._lay.alarm_last = { on, t: Date.now() }; this._save(); }
+    const ch = !id && a.key && (on ? a.key.on : a.key.off);
+    if (ch) { h.callService('homematicip_local', 'set_device_value', { device_address: a.key.addr, channel: ch, parameter: 'PRESS_SHORT', value: 'true', value_type: 'boolean' }); return; }
     if (id) { const dom = id.split('.')[0]; h.callService(dom, dom === 'button' ? 'press' : 'turn_on', { entity_id: id }); return; }
     if (a.state && /^(switch|input_boolean)\./.test(a.state)) h.callService('homeassistant', on ? 'turn_on' : 'turn_off', { entity_id: a.state });
     if (a.state && a.state.startsWith('alarm_control_panel.')) h.callService('alarm_control_panel', on ? 'alarm_arm_away' : 'alarm_disarm', { entity_id: a.state });
   }
+  _alarmSub(a, armed) {
+    const l = this._lay && this._lay.alarm_last;
+    if (!a.state && l && l.t) {
+      const d = new Date(l.t), now = new Date();
+      const when = (d.toDateString() === now.toDateString() ? '' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ' ') + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      return `zuletzt hier ${l.on ? 'scharf' : 'unscharf'} geschaltet, ${when} Uhr`;
+    }
+    return armed ? 'Sirene löst bei Öffnen aus' : 'Antippen zum Schalten';
+  }
   _renderAlarm() {
     const el = this._k.alarm; if (!el) return;
     const a = this._alarmEnt(), armed = this._armed(a);
-    const can = a.on || a.off || (a.state && /^(switch|input_boolean|alarm_control_panel)\./.test(a.state));
+    const can = a.on || a.off || a.key || (a.state && /^(switch|input_boolean|alarm_control_panel)\./.test(a.state));
     let html;
     if (!can && armed === null) {
       html = `<div class="alarm"><div class="st">${svg('shield')}<div><b>Alarmanlage</b><span>noch nicht mit Home Assistant verbunden</span></div></div>
         <div class="ab"><button disabled>Scharf schalten</button><button class="off" disabled>Unscharf</button></div></div>`;
     } else {
       const ask = this._armAsk ? `<div class="cf">${this._armAsk === 'on' ? 'Wirklich scharf schalten?' : 'Wirklich unscharf schalten?'}<button class="y" data-arm-yes>Ja</button><button data-arm-no>Abbrechen</button></div>` : '';
-      html = `<div class="alarm ${armed ? 'on' : ''}"><div class="st">${svg(armed ? 'lock' : 'shield')}<div><b>Alarmanlage ${armed === null ? '' : armed ? 'scharf' : 'unscharf'}</b><span>${armed ? 'Sirene löst bei Öffnen aus' : 'Antippen zum Schalten'}</span></div></div>
+      html = `<div class="alarm ${armed ? 'on' : ''}"><div class="st">${svg(armed ? 'lock' : 'shield')}<div><b>Alarmanlage ${armed === null ? '' : armed ? 'scharf' : 'unscharf'}</b><span>${this._alarmSub(a, armed)}</span></div></div>
         <div class="ab"><button data-arm="on" ${armed ? 'disabled' : ''}>Scharf schalten</button><button class="off" data-arm="off" ${armed === false ? 'disabled' : ''}>Unscharf</button></div>${ask}</div>`;
     }
     if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; }
