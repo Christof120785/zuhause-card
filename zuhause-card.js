@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.5.2';
+const VERSION = '2.5.3';
 
 const DEFAULTS = {
   name: '',
@@ -97,7 +97,7 @@ const CSS = `
 @media(min-width:1100px){.grid{grid-template-columns:repeat(12,minmax(0,1fr))}
   .hero{grid-column:span 12}.energy{grid-column:span 7}.wb{grid-column:span 5}
   .sec{grid-column:span 4}.home{grid-column:span 8}
-  .cams{grid-column:span 4}.wx{grid-column:span 8}.hist{grid-column:span 8}.hints{grid-column:span 4}}
+  .cams{grid-column:span 4}.wx{grid-column:span 8}.hist{grid-column:span 12}}
 @media(min-width:700px) and (max-width:1099px){.home{grid-column:1/-1}}
 .card{background:var(--card);border-radius:20px;padding:14px 16px;min-width:0;box-shadow:0 1px 2px rgba(20,30,50,.05)}
 .eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;display:flex;justify-content:space-between;gap:8px}
@@ -395,6 +395,7 @@ class ZuhauseCard extends HTMLElement {
           <h2 data-k="sech">Alles im Blick</h2><p class="sub" data-k="secs"></p></div>
         <div class="stats two"><div><b class="num" data-k="nopen">–</b><span>offen</span></div><div><b class="num" data-k="nclosed">–</b><span>geschlossen</span></div></div>
         ${contacts}
+        <div data-k="hints"></div>
       </section>
 
       <section class="card home">
@@ -417,12 +418,6 @@ class ZuhauseCard extends HTMLElement {
         <h2>Heute und die nächsten Tage</h2><p class="sub" data-k="wxs"></p>
         <div class="hrs" data-k="fch"></div>
         <div class="fc" data-k="fc"></div>
-      </section>
-
-      <section class="card hints">
-        <div class="eyebrow"><span>Hinweise</span><span>automatisch</span></div>
-        <h2>Das solltest du wissen</h2><p class="sub">Nur was gerade Aufmerksamkeit braucht</p>
-        <div data-k="hints"></div>
       </section>
 
       <section class="card hist chart">
@@ -1056,7 +1051,7 @@ class ZuhauseCard extends HTMLElement {
     this._set('nclosed', known - open.length);
     k.shield.classList.toggle('alert', open.length > 0 || lost.length > 0);
     this._set('sech', open.length ? `${open.length} offen` : lost.length ? `${lost.length} ohne Verbindung` : 'Alles im Blick');
-    this._set('secs', open.length ? 'Bitte prüfen, ob das so gewollt ist.' : lost.length ? 'Ein Kontakt meldet sich nicht, vielleicht ist die Batterie leer.' : 'Alle Türen und Fenster sind zu.');
+    this._set('secs', open.length ? 'Bitte prüfen, ob das so gewollt ist.' : lost.length ? (lost.length > 1 ? 'Kontakte melden sich nicht' : 'Ein Kontakt meldet sich nicht') + ', vielleicht ist die Batterie leer.' : 'Alle Türen und Fenster sind zu.');
 
     // Kopfzeile
     const lightsOn = Object.keys(this._hass.states).filter(id => id.startsWith('light.') && this._hass.states[id].state === 'on').length;
@@ -1082,13 +1077,7 @@ class ZuhauseCard extends HTMLElement {
 
     // Hinweise
     const hints = [];
-    open.forEach(x => {
-      const s = this._s(x.entity);
-      const min = Math.round((Date.now() - new Date(s.last_changed)) / 60000);
-      hints.push([`${x.name} offen`, min < 60 ? `seit ${min} min` : `seit ${Math.round(min / 60)} h`, 'warn']);
-    });
     this._cams.forEach(m => { if (this._ringing(m)) hints.push([`Es klingelt: ${m.name}`, 'jetzt', 'warn']); });
-    lost.forEach(x => hints.push([`${x.name} meldet sich nicht`, 'Batterie?', 'warn']));
     Object.values(this._hass.states).forEach(s => {
       if (s.attributes.device_class === 'battery' && s.entity_id.startsWith('sensor.')) {
         const v = parseFloat(s.state);
@@ -1100,8 +1089,8 @@ class ZuhauseCard extends HTMLElement {
     if (k.hints.dataset.v !== hk) {
       k.hints.dataset.v = hk;
       k.hints.innerHTML = hints.length
-        ? hints.slice(0, 6).map(([a, b, cl]) => `<div class="row"><div class="txt"><b>${a}</b></div><span class="pill ${cl}">${b}</span></div>`).join('')
-        : '<div class="row"><div class="txt"><b>Alles in Ordnung</b><span>Gerade gibt es nichts zu tun.</span></div></div>';
+        ? '<div class="eyebrow" style="margin:12px 0 2px"><span>Hinweise</span></div>' + hints.slice(0, 6).map(([a, b, cl]) => `<div class="row"><div class="txt"><b>${a}</b></div><span class="pill ${cl}">${b}</span></div>`).join('')
+        : '';
     }
   }
 
