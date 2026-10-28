@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.5.3';
+const VERSION = '2.6.0';
 
 const DEFAULTS = {
   name: '',
@@ -538,7 +538,7 @@ class ZuhauseCard extends HTMLElement {
   _rooms() {
     const h = this._hass, st = h.states, areas = h.areas || {};
     const by = {};
-    const add = (a, kind, s) => { if (!a || !areas[a]) return; (by[a] = by[a] || { id: a, name: areas[a].name, light: [], cover: [], climate: [], sw: [], scene: [] })[kind].push(s); };
+    const add = (a, kind, s) => { if (!a || !areas[a]) return; (by[a] = by[a] || { id: a, name: areas[a].name, light: [], cover: [], climate: [], sw: [], scene: [], fn: [] })[kind].push(s); };
     const all = Object.values(st);
     // Lichter, die schon in einer Hue-Gruppe stecken, nicht einzeln zeigen
     const inGroup = new Set();
@@ -578,6 +578,28 @@ class ZuhauseCard extends HTMLElement {
       const nm = (list[0].attributes.friendly_name || list[0].entity_id).replace(/\s+\d+$/, '');
       add(a, 'sw', { entity_id: list[0].entity_id, state: on ? 'on' : av ? 'off' : 'unavailable', attributes: Object.assign({}, list[0].attributes, { friendly_name: nm }), _grp: list.map(x => x.entity_id) });
     });
+    // Funktionen aus der CCU: virtuelle Tasten (z. B. "Carportlicht dauerhaft ein")
+    // und Sperr-Variablen (z. B. "Carportlicht gesperrt"), dem Raum über den Namen zugeordnet
+    const OUTF = /au(ss|ß)en|terr?asse|garten(?!haus)|carport|einfahrt|hof|balkon/i;
+    const fnRoom = n => {
+      if (OUTF.test(n)) return (by.__aussen = by.__aussen || { id: '__aussen', name: 'Außen', light: [], cover: [], climate: [], sw: [], scene: [], fn: [] }) && '__aussen';
+      const m = areaList.find(x => nrm(n).includes(nrm(x.name)) && !FUNC.test(nrm(x.name))); return m ? m.area_id : null;
+    };
+    const addFn = (n, f) => { const a = fnRoom(n); if (a === '__aussen') by.__aussen.fn.push(f); else if (a) add(a, 'fn', f); };
+    const devName = e => { const d = e && e.device_id && h.devices && h.devices[e.device_id]; return d ? (d.name_by_user || d.name || '') : ''; };
+    all.forEach(s => {
+      const id = s.entity_id, e = h.entities[id]; if (!e || !/homematic/.test(e.platform || '')) return;
+      const d = e.device_id && h.devices && h.devices[e.device_id];
+      const n = (s.attributes.friendly_name || '').replace(devName(e), '').trim();
+      if (id.startsWith('event.') && d && /RCV-50/i.test(d.model || '')) {
+        if (!n || /^v?ch\d+$|sch(ä|ae)rfen|scharf/i.test(n)) return;
+        const ca = String(s.attributes.channel_address || s.attributes.address || '');
+        const ch = +(ca.split(':')[1] || (id.match(/_ch(\d+)/) || [])[1] || 0);
+        if (ch) addFn(n, { kind: 'key', entity_id: id, name: n, addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch, state: s.state });
+      } else if (/^(binary_sensor|switch|sensor)\./.test(id) && /gesperrt|sperre/i.test(n)) {
+        addFn(n, { kind: 'var', entity_id: id, name: n, on: /^(on|true|wahr|ja)$/i.test(s.state), state: s.state });
+      }
+    });
     // Bereiche zusammenlegen: selbst gewählt (Anordnen) oder automatisch,
     // wenn ein Name den anderen enthält ("Wohnzimmer klein" -> "Wohnzimmer")
     const merge = (this._lay && this._lay.merge) || {};
@@ -585,7 +607,7 @@ class ZuhauseCard extends HTMLElement {
     const OUT = /au(ss|ß)en|terr?asse|garten(?!haus)|carport|einfahrt|vordemhaus|weihnacht|lichterkette|hof|balkon|stern/;
     const syn = { arbeitszimmer: 'büro', office: 'büro', wc: 'gästewc' };
     if (Object.keys(by).some(a => OUT.test(norm(by[a].name)) && merge[a] === undefined))
-      by.__aussen = by.__aussen || { id: '__aussen', name: 'Außen', light: [], cover: [], climate: [], sw: [], scene: [] };
+      by.__aussen = by.__aussen || { id: '__aussen', name: 'Außen', light: [], cover: [], climate: [], sw: [], scene: [], fn: [] };
     const auto = a => {
       const n = norm(by[a].name);
       if (a === '__aussen') return '';
@@ -603,7 +625,7 @@ class ZuhauseCard extends HTMLElement {
     this._merged = [];
     Object.keys(target).forEach(a => {
       const t = target[a]; if (!t) return;
-      ['light', 'cover', 'climate', 'sw'].forEach(k => by[t][k].push(...by[a][k]));
+      ['light', 'cover', 'climate', 'sw', 'fn'].forEach(k => by[t][k].push(...by[a][k]));
       (by[t].also = by[t].also || []).push(by[a].name);
       this._merged.push({ id: a, name: by[a].name, into: t });
       delete by[a];
@@ -637,7 +659,7 @@ class ZuhauseCard extends HTMLElement {
     // eigene Raumnamen und verschobene Geräte (Anordnen)
     const L = this._lay || {}, names = L.names || {}, dev = L.dev || {};
     Object.values(by).forEach(r => { if (names[r.id]) r.name = names[r.id]; });
-    Object.values(by).forEach(r => ['light', 'cover', 'climate', 'sw'].forEach(k => {
+    Object.values(by).forEach(r => ['light', 'cover', 'climate', 'sw', 'fn'].forEach(k => {
       r[k] = r[k].filter(x => {
         const to = dev[x.entity_id] && dev[x.entity_id].r;
         if (!to || to === r.id || !by[to]) return true;
@@ -645,7 +667,7 @@ class ZuhauseCard extends HTMLElement {
       });
     }));
     // leere Bereiche (nichts zu schalten) weglassen
-    const list = Object.values(by).filter(r => r.light.length || r.cover.length || r.climate.length || r.sw.length);
+    const list = Object.values(by).filter(r => r.light.length || r.cover.length || r.climate.length || r.sw.length || r.fn.length);
     const order = (this._lay && this._lay.order) || [];
     const RANK = [/wohnzimmer|wohnen/, /ess/, /küche|kueche/, /flur|diele|eingang/, /büro|buero|arbeit/, /schlaf/, /kind/, /bad|dusche/, /gäste|gaeste|wc/, /keller|technik/, /gartenhaus|hütte|huette/, /pool/, /außen|aussen/];
     const rank = r => { const n = r.name.toLowerCase(); const i = RANK.findIndex(re => re.test(n)); return i < 0 ? 50 : i; };
@@ -775,6 +797,16 @@ class ZuhauseCard extends HTMLElement {
       });
       r.sw.forEach(s => { h += row('plug', s.entity_id, this._nm(s, r), s.state === 'on' ? 'An' : s.state === 'off' ? 'Aus' : 'nicht erreichbar', tg(s)); });
     }
+    if (r.fn.length) {
+      h += '<div class="sect">Funktionen</div>';
+      r.fn.forEach(f => {
+        if (f.kind === 'var') h += row('lock', f.entity_id, f.name, f.on ? 'An' : 'Aus', `<button class="tg" role="switch" aria-label="${f.name}" aria-checked="${f.on}" data-hmvar="${f.entity_id}"></button>`);
+        else {
+          const t = Date.parse(f.state), when = isNaN(t) ? '' : ' · zuletzt ' + new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+          h += row('plug', f.entity_id, f.name, 'Taste der Zentrale' + when, `<button class="bst" data-vkey="${f.addr}|${f.ch}">Drücken</button>`);
+        }
+      });
+    }
     if (r.scene.length) h += `<div class="sect">Szenen</div><div class="scw" style="margin-top:6px">${r.scene.map(s => `<button class="scb" type="button" data-scene="${s.entity_id}">${s.attributes.name || s.attributes.friendly_name}</button>`).join('')}</div>`;
     if (r.cover.length) {
       h += '<div class="sect">Jalousien</div>';
@@ -832,6 +864,8 @@ class ZuhauseCard extends HTMLElement {
       if (d.q === 'boost') { const ids = rooms.flatMap(r => r.climate).filter(x => this._canBoost(x)).map(x => x.entity_id); if (ids.length) this._startBoost(ids); return done(); }
       return true;
     }
+    if (d.vkey) { const [addr, ch] = d.vkey.split('|'); h.callService('homematicip_local', 'set_device_value', { device_address: addr, channel: +ch, parameter: 'PRESS_SHORT', value: 'true', value_type: 'boolean' }); t.textContent = 'Gedrückt'; return true; }
+    if (d.hmvar) { this._toggleVar(d.hmvar); return true; }
     if (d.arm) { this._armAsk = d.arm; this._renderAlarm(); return true; }
     if (d.armNo !== undefined) { this._armAsk = null; this._renderAlarm(); return true; }
     if (d.armYes !== undefined) { this._doArm(this._armAsk === 'on'); this._armAsk = null; this._renderAlarm(); return true; }
@@ -851,6 +885,20 @@ class ZuhauseCard extends HTMLElement {
       state: c.alarm_state || find(['switch', 'input_boolean', 'binary_sensor', 'select', 'sensor', 'alarm_control_panel'], /^alarm(anlage)?( scharf| status| zustand)?$/i),
     };
   }
+  // Systemvariable der CCU umschalten (z. B. "Carportlicht gesperrt")
+  async _toggleVar(id) {
+    const h = this._hass, s = this._s(id); if (!s) return;
+    const on = /^(on|true|wahr|ja)$/i.test(s.state);
+    if (id.startsWith('switch.')) { h.callService('switch', on ? 'turn_off' : 'turn_on', { entity_id: id }); return; }
+    if (!this._hmEntry) {
+      try { const es = await h.callWS({ type: 'config_entries/get', domain: 'homematicip_local' }); this._hmEntry = es && es[0] && es[0].entry_id; } catch (e) { /* kein Zugriff */ }
+    }
+    if (!this._hmEntry) return;
+    const e = h.entities[id], d = e && e.device_id && h.devices && h.devices[e.device_id];
+    const name = (s.attributes.friendly_name || '').replace(d ? (d.name_by_user || d.name || '') : '', '').trim();
+    h.callService('homematicip_local', 'set_variable_value', { entry_id: this._hmEntry, name, value: !on });
+  }
+
   // Virtuelle Fernbedienung der CCU (HmIP-RCV-50) direkt über homematicip_local drücken
   _alarmKey() {
     const c = this._cfg, k = (this._lay && this._lay.alarm_key) || {};
