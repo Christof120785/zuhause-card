@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 
 const DEFAULTS = {
   name: '',
@@ -203,9 +203,11 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .cb button,.bst{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:9px;padding:5px 9px;font-size:12px;font-weight:600}
 .bst.on{background:var(--warn);color:#fff;border-color:var(--warn)}
 .hint{font-size:12px;background:var(--grid-soft);color:var(--grid);border-radius:10px;padding:8px 10px;margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint select,.mg{font:inherit;font-size:11.5px;padding:3px 4px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);max-width:100%}
 .hint input{width:56px;font:inherit;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 /* Alarmanlage */
-.alarm{border-radius:14px;padding:10px 12px;background:var(--batt-soft);margin:6px 0 10px;display:grid;gap:8px}
+.alarm{border-radius:14px;padding:10px 12px;background:var(--batt-soft);margin:2px 0 10px;display:grid;gap:8px;align-items:center}
+@media(min-width:700px){.alarm{grid-template-columns:1fr minmax(260px,auto)}.alarm .cf{grid-column:1/-1}}
 .alarm.on{background:var(--warn-soft)}
 .alarm .st{display:flex;gap:10px;align-items:center}
 .alarm .st svg{width:22px;height:22px;color:var(--ok)}
@@ -354,7 +356,6 @@ class ZuhauseCard extends HTMLElement {
         <div class="eyebrow"><span>Sicherheit</span><span>Homematic</span></div>
         <div class="center"><div class="shield" data-k="shield">${svg('shield')}</div>
           <h2 data-k="sech">Alles im Blick</h2><p class="sub" data-k="secs"></p></div>
-        <div data-k="alarm"></div>
         <div class="stats two"><div><b class="num" data-k="nopen">–</b><span>offen</span></div><div><b class="num" data-k="nclosed">–</b><span>geschlossen</span></div></div>
         ${contacts}
       </section>
@@ -363,6 +364,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="hhead"><div><div class="eyebrow"><span>Räume</span></div>
           <h2>Im Haus</h2><p class="sub">Antippen klappt Licht, Szenen, Jalousien und Heizung auf</p></div>
           <button class="arr" data-arrange aria-pressed="false">↕ Anordnen</button></div>
+        <div data-k="alarm"></div>
         <div class="quick" data-k="quick"></div>
         <div data-k="ahint"></div>
         <div class="rg" data-k="rooms"></div>
@@ -410,11 +412,12 @@ class ZuhauseCard extends HTMLElement {
       const t = e.target;
       if (t.dataset.dim) this._hass.callService('light', 'turn_on', { entity_id: t.dataset.dim, brightness_pct: +t.value });
       if (t.dataset.pos) this._hass.callService('cover', 'set_cover_position', { entity_id: t.dataset.pos, position: +t.value });
+      if (t.dataset.merge && this._lay) { this._lay.merge[t.dataset.merge] = t.value; this._save(); this._roomSig = null; this._renderRooms(); }
       if (t.dataset.boostmin) { const v = Math.max(1, Math.min(240, +t.value || 30)); this._lay.boost_min = v; this._save(); }
       if (t.dataset.dim || t.dataset.pos) this._busy = Date.now() + 1500;
     });
     root.addEventListener('click', e => {
-      if (e.target.closest('input')) return;
+      if (e.target.closest('input,select')) return;
       if (this._roomClick(e)) return;
       const t = e.target.closest('[data-toggle]');
       if (t) {
@@ -458,7 +461,7 @@ class ZuhauseCard extends HTMLElement {
 
   // ---------- Anordnung (gespeichert in Home Assistant, pro Benutzer) ----------
   async _loadLayout() {
-    this._lay = { order: [], hidden: [], boost: {}, boost_min: 30 };
+    this._lay = { order: [], hidden: [], merge: {}, boost: {}, boost_min: 30 };
     try {
       const r = await this._hass.callWS({ type: 'frontend/get_user_data', key: 'zuhause-card' });
       if (r && r.value) Object.assign(this._lay, r.value);
@@ -494,10 +497,31 @@ class ZuhauseCard extends HTMLElement {
       else if (dom === 'switch') { if (!/sirene|alarm/i.test(s.attributes.friendly_name || id)) add(a, 'sw', s); }
       else add(a, dom, s);
     });
+    // Bereiche zusammenlegen: selbst gewählt (Anordnen) oder automatisch,
+    // wenn ein Name den anderen enthält ("Wohnzimmer klein" -> "Wohnzimmer")
+    const merge = (this._lay && this._lay.merge) || {};
+    const norm = x => x.toLowerCase().replace(/[^a-zäöüß]/g, '');
+    const auto = a => {
+      const n = norm(by[a].name);
+      const c = Object.values(by).filter(b => b.id !== a && norm(b.name).length >= 4 && n !== norm(b.name) && n.includes(norm(b.name)));
+      c.sort((x, y) => norm(y.name).length - norm(x.name).length);
+      return c.length ? c[0].id : '';
+    };
+    const target = {};
+    Object.keys(by).forEach(a => { const m = merge[a]; target[a] = m === undefined ? auto(a) : (m === '-' ? '' : m); });
+    Object.keys(target).forEach(a => { if (target[a] && (!by[target[a]] || target[target[a]])) target[a] = ''; });
+    this._merged = [];
+    Object.keys(target).forEach(a => {
+      const t = target[a]; if (!t) return;
+      ['light', 'cover', 'climate', 'sw'].forEach(k => by[t][k].push(...by[a][k]));
+      (by[t].also = by[t].also || []).push(by[a].name);
+      this._merged.push({ id: a, name: by[a].name, into: t });
+      delete by[a];
+    });
     // Hue-Szenen: Gruppenname passt zum Bereich oder zu einer Hue-Gruppe im Bereich
     const scenes = all.filter(s => s.entity_id.startsWith('scene.') && s.attributes.group_name);
     Object.values(by).forEach(r => {
-      const names = new Set([r.name.toLowerCase(), ...r.light.filter(l => l.attributes.is_hue_group).map(l => (l.attributes.friendly_name || '').trim().toLowerCase())]);
+      const names = new Set([r.name.toLowerCase(), ...(r.also || []).map(x => x.toLowerCase()), ...r.light.filter(l => l.attributes.is_hue_group).map(l => (l.attributes.friendly_name || '').trim().toLowerCase())]);
       r.scene = scenes.filter(s => names.has(s.attributes.group_name.trim().toLowerCase()))
         .sort((x, y) => (x.attributes.name || x.entity_id).localeCompare(y.attributes.name || y.entity_id));
       const byName = (x, y) => (x.attributes.friendly_name || '').localeCompare(y.attributes.friendly_name || '');
@@ -573,7 +597,7 @@ class ZuhauseCard extends HTMLElement {
     const quick = `<button class="qb" data-q="close">${svg('blind')} Alle Jalousien zu</button><button class="qb" data-q="open">${svg('blind')} Alle auf</button>`
       + `<button class="qb" data-q="off">${svg('bulb')} Alle Lichter aus</button>`
       + (allClim.length ? `<button class="qb ${allBoost ? 'on' : ''}" data-q="boost">${svg('heat')} ${allBoost ? 'Boost ' + allBoost + ' · verlängern' : 'Boost für alle'}</button>` : '');
-    const hint = arr ? `<div class="hint">Pfeile verschieben eine Kachel, das Auge blendet sie aus.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>` : '';
+    const hint = arr ? `<div class="hint">Pfeile verschieben, das Auge blendet aus, die Auswahl legt einen Bereich in einen anderen Raum.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>` : '';
     let html = '';
     const vis = rooms.filter(r => arr || !lay.hidden.includes(r.id));
     vis.forEach(r => {
@@ -591,10 +615,11 @@ class ZuhauseCard extends HTMLElement {
       html += `<div class="rt ${hid ? 'hid' : ''}" role="button" tabindex="0" data-room="${r.id}" aria-expanded="${!arr && this._open === r.id}"><b>${r.name}</b>`
         + (t != null ? `<span class="v num">${de(t, 1)}<small> °C</small></span>` : '')
         + `<span class="m">${pills.join('')}</span>`
-        + (arr ? `<span class="mv"><button data-mv="${r.id}|-1" aria-label="${r.name} nach vorne">‹</button><button data-mv="${r.id}|1" aria-label="${r.name} nach hinten">›</button><button data-hide="${r.id}" aria-label="${r.name} aus- oder einblenden">${svg('eye')}</button></span>` : '')
+        + (arr ? `<span class="mv"><button data-mv="${r.id}|-1" aria-label="${r.name} nach vorne">‹</button><button data-mv="${r.id}|1" aria-label="${r.name} nach hinten">›</button><button data-hide="${r.id}" aria-label="${r.name} aus- oder einblenden">${svg('eye')}</button></span>${this._mergeSel(r.id, '', rooms)}` : '')
         + `</div>`;
       if (!arr && this._open === r.id) html += `<div class="rp">${this._roomPanel(r)}</div>`;
     });
+    if (arr && this._merged.length) html += this._merged.map(m => `<div class="rt hid"><b>${m.name}</b><span class="m"><span class="pill off">liegt in ${(rooms.find(r => r.id === m.into) || {}).name}</span></span>${this._mergeSel(m.id, m.into, rooms)}</div>`).join('');
     if (!rooms.length) html = '<p class="sub">Noch keine Bereiche mit Geräten gefunden. Ordne Lichter, Jalousien und Thermostate in Home Assistant einem Bereich zu.</p>';
     const sig = quick + hint + html;
     if (sig === this._roomSig || (this._busy && Date.now() < this._busy)) return;
@@ -602,6 +627,10 @@ class ZuhauseCard extends HTMLElement {
     k.quick.innerHTML = quick; k.ahint.innerHTML = hint; k.rooms.innerHTML = html;
     const ab = this.shadowRoot.querySelector('[data-arrange]');
     ab.setAttribute('aria-pressed', arr); ab.textContent = arr ? '✓ Fertig' : '↕ Anordnen';
+  }
+
+  _mergeSel(id, cur, rooms) {
+    return `<select class="mg" data-merge="${id}" aria-label="Zusammenlegen"><option value="-">eigener Raum</option>${rooms.filter(r => r.id !== id).map(r => `<option value="${r.id}" ${r.id === cur ? 'selected' : ''}>in ${r.name}</option>`).join('')}</select>`;
   }
 
   _roomPanel(r) {
