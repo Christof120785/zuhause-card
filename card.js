@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 const DEFAULTS = {
   name: '',
@@ -204,6 +204,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .bst.on{background:var(--warn);color:#fff;border-color:var(--warn)}
 .hint{font-size:12px;background:var(--grid-soft);color:var(--grid);border-radius:10px;padding:8px 10px;margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .hint select,.mg{font:inherit;font-size:11.5px;padding:3px 4px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);max-width:100%}
+.rn{font:inherit;font-weight:600;font-size:13px;width:100%;padding:3px 6px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 .hint input{width:56px;font:inherit;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 /* Alarmanlage */
 .alarm{border-radius:14px;padding:10px 12px;background:var(--batt-soft);margin:2px 0 10px;display:grid;gap:8px;align-items:center}
@@ -400,6 +401,8 @@ class ZuhauseCard extends HTMLElement {
     root.querySelectorAll('[data-k]').forEach(e => { this._k[e.dataset.k] = e; });
     // Während ein Slider bewegt wird, nicht neu zeichnen
     root.addEventListener('pointerdown', e => { if (e.target.matches('input[type=range]')) this._busy = Date.now() + 60000; });
+    root.addEventListener('focusin', e => { if (e.target.matches('input.rn,select')) this._busy = Date.now() + 120000; });
+    root.addEventListener('focusout', e => { if (e.target.matches('input.rn,select')) this._busy = 0; });
     root.addEventListener('input', e => {
       const t = e.target;
       if (t.dataset.dim || t.dataset.pos) {
@@ -412,6 +415,14 @@ class ZuhauseCard extends HTMLElement {
       const t = e.target;
       if (t.dataset.dim) this._hass.callService('light', 'turn_on', { entity_id: t.dataset.dim, brightness_pct: +t.value });
       if (t.dataset.pos) this._hass.callService('cover', 'set_cover_position', { entity_id: t.dataset.pos, position: +t.value });
+      if (this._lay && (t.dataset.rname || t.dataset.dname || t.dataset.droom)) {
+        const L = this._lay; L.names = L.names || {}; L.dev = L.dev || {};
+        const v = t.value.trim();
+        if (t.dataset.rname) { if (v) L.names[t.dataset.rname] = v; else delete L.names[t.dataset.rname]; }
+        if (t.dataset.dname) { const e = L.dev[t.dataset.dname] = L.dev[t.dataset.dname] || {}; if (v) e.n = v; else delete e.n; }
+        if (t.dataset.droom) { (L.dev[t.dataset.droom] = L.dev[t.dataset.droom] || {}).r = v; }
+        this._save(); this._roomSig = null; this._busy = 0; this._renderRooms();
+      }
       if (t.dataset.merge && this._lay) { this._lay.merge[t.dataset.merge] = t.value; this._save(); this._roomSig = null; this._renderRooms(); }
       if (t.dataset.boostmin) { const v = Math.max(1, Math.min(240, +t.value || 30)); this._lay.boost_min = v; this._save(); }
       if (t.dataset.dim || t.dataset.pos) this._busy = Date.now() + 1500;
@@ -461,7 +472,7 @@ class ZuhauseCard extends HTMLElement {
 
   // ---------- Anordnung (gespeichert in Home Assistant, pro Benutzer) ----------
   async _loadLayout() {
-    this._lay = { order: [], hidden: [], merge: {}, boost: {}, boost_min: 30 };
+    this._lay = { order: [], hidden: [], merge: {}, names: {}, dev: {}, boost: {}, boost_min: 30 };
     try {
       const r = await this._hass.callWS({ type: 'frontend/get_user_data', key: 'zuhause-card' });
       if (r && r.value) Object.assign(this._lay, r.value);
@@ -564,6 +575,16 @@ class ZuhauseCard extends HTMLElement {
     Object.values(by).forEach(r => {
       if (r.light.some(l => l.attributes.is_hue_group)) r.light = r.light.filter(l => l.attributes.is_hue_group || (h.entities[l.entity_id] || {}).platform !== 'hue');
     });
+    // eigene Raumnamen und verschobene Geräte (Anordnen)
+    const L = this._lay || {}, names = L.names || {}, dev = L.dev || {};
+    Object.values(by).forEach(r => { if (names[r.id]) r.name = names[r.id]; });
+    Object.values(by).forEach(r => ['light', 'cover', 'climate', 'sw'].forEach(k => {
+      r[k] = r[k].filter(x => {
+        const to = dev[x.entity_id] && dev[x.entity_id].r;
+        if (!to || to === r.id || !by[to]) return true;
+        by[to][k].push(x); return false;
+      });
+    }));
     // leere Bereiche (nichts zu schalten) weglassen
     const list = Object.values(by).filter(r => r.light.length || r.cover.length || r.climate.length || r.sw.length);
     const order = (this._lay && this._lay.order) || [];
@@ -578,6 +599,8 @@ class ZuhauseCard extends HTMLElement {
   }
 
   _nm(s, r) {
+    const own = this._lay && this._lay.dev && this._lay.dev[s.entity_id];
+    if (own && own.n) return own.n;
     let n = (s.attributes.friendly_name || s.entity_id).trim().replace(/\s+/g, ' ');
     const t = n.replace(/^(jalou?i?sie|wandthermostat|thermostat|stellantrieb)\s+/i, '');
     if (t) n = t;
@@ -632,7 +655,7 @@ class ZuhauseCard extends HTMLElement {
     const quick = `<button class="qb" data-q="close">${svg('blind')} Alle Jalousien zu</button><button class="qb" data-q="open">${svg('blind')} Alle auf</button>`
       + `<button class="qb" data-q="off">${svg('bulb')} Alle Lichter aus</button>`
       + (allClim.length ? `<button class="qb ${allBoost ? 'on' : ''}" data-q="boost">${svg('heat')} ${allBoost ? 'Boost ' + allBoost + ' · verlängern' : 'Boost für alle'}</button>` : '');
-    const hint = arr ? `<div class="hint">Pfeile verschieben, das Auge blendet aus, die Auswahl legt einen Bereich in einen anderen Raum.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>` : '';
+    const hint = arr ? `<div class="hint">Namen antippen zum Umbenennen. Pfeile verschieben, das Auge blendet aus, die Auswahl legt einen Raum in einen anderen. Raum antippen zeigt seine Geräte zum Umbenennen und Verschieben.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>` : '';
     let html = '';
     const vis = rooms.filter(r => arr || !lay.hidden.includes(r.id));
     vis.forEach(r => {
@@ -647,12 +670,12 @@ class ZuhauseCard extends HTMLElement {
       if (r.cover.length) pills.push(`<span class="pill off">${ca === r.cover.length ? 'Jalousie auf' : cz === r.cover.length ? 'Jalousie zu' : 'Jalousie teils'}</span>`);
       if (bi) pills.push(`<span class="pill warn">Boost ${bi}</span>`);
       const hid = lay.hidden.includes(r.id);
-      html += `<div class="rt ${hid ? 'hid' : ''}" role="button" tabindex="0" data-room="${r.id}" aria-expanded="${!arr && this._open === r.id}"><b>${r.name}</b>`
+      html += `<div class="rt ${hid ? 'hid' : ''}" role="button" tabindex="0" data-room="${r.id}" aria-expanded="${this._open === r.id}">${arr ? `<input class="rn" data-rname="${r.id}" value="${r.name.replace(/"/g, '&quot;')}" aria-label="Raumname">` : `<b>${r.name}</b>`}`
         + (t != null ? `<span class="v num">${de(t, 1)}<small> °C</small></span>` : '')
         + `<span class="m">${pills.join('')}</span>`
         + (arr ? `<span class="mv"><button data-mv="${r.id}|-1" aria-label="${r.name} nach vorne">‹</button><button data-mv="${r.id}|1" aria-label="${r.name} nach hinten">›</button><button data-hide="${r.id}" aria-label="${r.name} aus- oder einblenden">${svg('eye')}</button></span>${this._mergeSel(r.id, '', rooms)}` : '')
         + `</div>`;
-      if (!arr && this._open === r.id) html += `<div class="rp">${this._roomPanel(r)}</div>`;
+      if (this._open === r.id) html += `<div class="rp">${arr ? this._editPanel(r, rooms) : this._roomPanel(r)}</div>`;
     });
     if (arr && this._merged.length) html += this._merged.map(m => `<div class="rt hid"><b>${m.name}</b><span class="m"><span class="pill off">liegt in ${(rooms.find(r => r.id === m.into) || {}).name}</span></span>${this._mergeSel(m.id, m.into, rooms)}</div>`).join('');
     if (!rooms.length) html = '<p class="sub">Noch keine Bereiche mit Geräten gefunden. Ordne Lichter, Jalousien und Thermostate in Home Assistant einem Bereich zu.</p>';
@@ -662,6 +685,16 @@ class ZuhauseCard extends HTMLElement {
     k.quick.innerHTML = quick; k.ahint.innerHTML = hint; k.rooms.innerHTML = html;
     const ab = this.shadowRoot.querySelector('[data-arrange]');
     ab.setAttribute('aria-pressed', arr); ab.textContent = arr ? '✓ Fertig' : '↕ Anordnen';
+  }
+
+  // Anordnen: Geräte eines Raums umbenennen oder in einen anderen Raum legen
+  _editPanel(r, rooms) {
+    const all = [...r.light, ...r.sw, ...r.cover, ...r.climate];
+    return `<div class="sect">Geräte in ${r.name}</div>` + all.map(s => {
+      const ic = s.entity_id.startsWith('cover.') ? 'blind' : s.entity_id.startsWith('climate.') ? 'heat' : s.entity_id.startsWith('switch.') ? 'plug' : 'bulb';
+      return `<div class="row" style="flex-wrap:wrap"><div class="ico">${svg(ic)}</div><div class="txt"><input class="rn" data-dname="${s.entity_id}" value="${this._nm(s, r).replace(/"/g, '&quot;')}" aria-label="Gerätename"><span>${s.attributes.friendly_name || s.entity_id}</span></div>
+        <select class="mg" data-droom="${s.entity_id}" aria-label="Raum">${rooms.map(o => `<option value="${o.id}" ${o.id === r.id ? 'selected' : ''}>${o.name}</option>`).join('')}</select></div>`;
+    }).join('') + '<p class="sub" style="margin:8px 0 0">Name ändern und Enter drücken. Leeres Feld stellt den Originalnamen wieder her.</p>';
   }
 
   _mergeSel(id, cur, rooms) {
@@ -724,7 +757,7 @@ class ZuhauseCard extends HTMLElement {
       this._lay.hidden = hd.includes(d.hide) ? hd.filter(x => x !== d.hide) : [...hd, d.hide];
       this._save(); return done();
     }
-    if (d.room) { if (!this._arrange) this._open = this._open === d.room ? null : d.room; return done(); }
+    if (d.room) { this._open = this._open === d.room ? null : d.room; return done(); }
     if (d.cv) { const [a, id] = d.cv.split('|'); h.callService('cover', a + '_cover', { entity_id: id }); return true; }
     if (d.boost) { const r = room(d.boost); if (r) this._startBoost(r.climate.filter(x => this._canBoost(x)).map(x => x.entity_id)); return done(); }
     if (d.boostoff) {
@@ -751,13 +784,19 @@ class ZuhauseCard extends HTMLElement {
     const nm = s => (s.attributes.friendly_name || '').trim();
     const find = (doms, re) => { const s = all.find(x => doms.includes(x.entity_id.split('.')[0]) && re.test(nm(x))); return s ? s.entity_id : null; };
     return {
-      on: c.alarm_on || find(['button', 'script'], /^(alarm(anlage)? )?(sch(ä|ae)rfen|scharf schalten)$/i),
-      off: c.alarm_off || find(['button', 'script'], /^(alarm(anlage)? )?(entsch(ä|ae)rfen|unscharf( schalten)?)$/i),
+      on: c.alarm_on || find(['button', 'script'], /^(?!.*entsch).*(sch(ä|ae)rfen|scharf schalten)/i),
+      off: c.alarm_off || find(['button', 'script'], /entsch(ä|ae)rfen|unscharf/i),
       state: c.alarm_state || find(['switch', 'input_boolean', 'binary_sensor', 'select', 'sensor', 'alarm_control_panel'], /^alarm(anlage)?( scharf| status| zustand)?$/i),
     };
   }
   _armed(a) {
-    const s = this._s(a.state); if (!s) return null;
+    const s = this._s(a.state);
+    if (!s) {
+      // ohne Status: zuletzt gedrückter Knopf (Button-Zustand = Zeitpunkt)
+      const t = id => { const x = this._s(id); const v = x && Date.parse(x.state); return isNaN(v) ? 0 : v || 0; };
+      const on = t(a.on), off = t(a.off);
+      return on || off ? on > off : null;
+    }
     const v = String(s.state).toLowerCase();
     if (v === 'unavailable' || v === 'unknown') return null;
     return /^(on|true|scharf|armed|armed_.*|ein|an)$/.test(v);
@@ -774,7 +813,8 @@ class ZuhauseCard extends HTMLElement {
     const can = a.on || a.off || (a.state && /^(switch|input_boolean|alarm_control_panel)\./.test(a.state));
     let html;
     if (!can && armed === null) {
-      html = `<div class="alarm"><div class="st">${svg('lock')}<div><b>Alarmanlage</b><span>noch nicht verbunden, kommt aus der Homematic-Zentrale</span></div></div></div>`;
+      html = `<div class="alarm"><div class="st">${svg('shield')}<div><b>Alarmanlage</b><span>noch nicht mit Home Assistant verbunden</span></div></div>
+        <div class="ab"><button disabled>Scharf schalten</button><button class="off" disabled>Unscharf</button></div></div>`;
     } else {
       const ask = this._armAsk ? `<div class="cf">${this._armAsk === 'on' ? 'Wirklich scharf schalten?' : 'Wirklich unscharf schalten?'}<button class="y" data-arm-yes>Ja</button><button data-arm-no>Abbrechen</button></div>` : '';
       html = `<div class="alarm ${armed ? 'on' : ''}"><div class="st">${svg(armed ? 'lock' : 'shield')}<div><b>Alarmanlage ${armed === null ? '' : armed ? 'scharf' : 'unscharf'}</b><span>${armed ? 'Sirene löst bei Öffnen aus' : 'Antippen zum Schalten'}</span></div></div>
