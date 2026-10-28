@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.10.0';
+const VERSION = '2.10.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -28,7 +28,7 @@ const TILES = {
 const DEFAULTS = {
   name: '',
   images: '/local/dashboard/',
-  weather: '', waste: '', radar: 'https://www.wetteronline.de/regenradar/friedland-niedersachsen?homemark=true', pv: '', grid_in: '', grid_out: '',
+  weather: '', waste: '', radar: 'https://embed.windy.com/embed2.html?lat=51.45&lon=9.93&detailLat=51.45&detailLon=9.93&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=true&calendar=now&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1', radar_link: 'https://www.wetteronline.de/regenradar/friedland-niedersachsen?homemark=true', pv: '', grid_in: '', grid_out: '',
   wallbox: '', wallbox_release: '', car_soc: '', car_power: '',
   batteries: [], contacts: [], rooms: [], switches: [], scene_rooms: [], cameras: [],
 };
@@ -265,7 +265,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .cf .y{background:#c83a3a;color:#fff}
 /* cameras */
 .bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
-.radar{width:100%;height:340px;border:0;border-radius:14px;background:var(--tile);display:block}
+.radar{width:100%;height:420px;border:0;border-radius:14px;background:var(--tile);display:block}
 .radl{display:inline-block;margin-top:8px;font-size:13px;color:var(--grid);text-decoration:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
@@ -444,10 +444,10 @@ class ZuhauseCard extends HTMLElement {
       </section>
 
       <section class="card rain" data-sec="rain">
-        <div class="eyebrow"><span>Regenradar</span><span>WetterOnline</span></div>
+        <div class="eyebrow"><span>Regenradar</span><span>Live</span></div>
         <h2>Regen in deiner Nähe</h2>
         <iframe class="radar" src="${c.radar}" loading="lazy" title="Regenradar"></iframe>
-        <a class="radl" href="${c.radar}" target="_blank" rel="noopener">Im großen Radar öffnen</a>
+        <a class="radl" href="${c.radar_link}" target="_blank" rel="noopener">Radar bei WetterOnline öffnen</a>
       </section>
 
       <section class="card hist chart" data-sec="hist">
