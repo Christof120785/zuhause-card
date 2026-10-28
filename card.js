@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.4.2';
+const VERSION = '2.4.3';
 
 const DEFAULTS = {
   name: '',
@@ -789,6 +789,7 @@ class ZuhauseCard extends HTMLElement {
       on: c.alarm_on || find(['button', 'script'], /^(?!.*entsch).*(sch(ä|ae)rfen|scharf schalten)/i),
       off: c.alarm_off || find(['button', 'script'], /entsch(ä|ae)rfen|unscharf/i),
       key: this._alarmKey(),
+      pres: c.alarm_presence || this._presence(),
       state: c.alarm_state || find(['switch', 'input_boolean', 'binary_sensor', 'select', 'sensor', 'alarm_control_panel'], /^alarm(anlage)?( scharf| status| zustand)?$/i),
     };
   }
@@ -815,7 +816,22 @@ class ZuhauseCard extends HTMLElement {
     if (!(on || off)) return null;
     return { addr: c.alarm_key_address || (f && f.addr) || 'HmIP-RCV-1', on, off, onEv: found.on && found.on.eid, offEv: found.off && found.off.eid };
   }
+  // Systemvariable "Anwesenheit" der CCU: nicht anwesend = scharf
+  _presence() {
+    const h = this._hass;
+    const s = Object.values(h.states).find(x => {
+      const e = h.entities && h.entities[x.entity_id];
+      return e && e.platform === 'homematicip_local' && /(^|\s)anwesenheit$/i.test((x.attributes.friendly_name || '').trim());
+    });
+    return s ? s.entity_id : null;
+  }
   _armed(a) {
+    const p = this._s(a.pres);
+    if (p && !a.state) {
+      const v = String(p.state).toLowerCase().trim();
+      if (/^(on|true|anwesend|ja|wahr|1)$/.test(v)) return false;
+      if (/^(off|false|nicht anwesend|abwesend|nein|falsch|0)$/.test(v)) return true;
+    }
     const s = this._s(a.state);
     if (!s) {
       // ohne Status: zuletzt gedrückter Knopf (Button-Zustand = Zeitpunkt)
@@ -844,6 +860,12 @@ class ZuhauseCard extends HTMLElement {
     const l = this._lay && this._lay.alarm_last;
     const t = id => { const x = this._s(id); const v = x && Date.parse(x.state); return isNaN(v) ? 0 : v || 0; };
     const ev = a.key ? Math.max(t(a.key.onEv), t(a.key.offEv)) : 0;
+    const p = !a.state && this._s(a.pres);
+    if (p && this._armed(a) !== null) {
+      const d = new Date(p.last_changed), now = new Date();
+      const when = (d.toDateString() === now.toDateString() ? '' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ' ') + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      return `seit ${when} Uhr`;
+    }
     if (!a.state && ev) {
       const d = new Date(ev), now = new Date();
       const when = (d.toDateString() === now.toDateString() ? '' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ' ') + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
