@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.4.1';
+const VERSION = '2.4.2';
 
 const DEFAULTS = {
   name: '',
@@ -825,12 +825,12 @@ class ZuhauseCard extends HTMLElement {
       if (!kind || found[kind]) continue;
       const a = s.attributes, ca = String(a.channel_address || a.address || '');
       const ch = +(ca.split(':')[1] || (s.entity_id.match(/_ch(\d+)/) || [])[1] || 0) || null;
-      found[kind] = { addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch };
+      found[kind] = { eid: s.entity_id, addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch };
     }
     const f = found.on || found.off;
     const on = c.alarm_key_on || k.on || (found.on && found.on.ch), off = c.alarm_key_off || k.off || (found.off && found.off.ch);
     if (!(on || off)) return null;
-    return { addr: c.alarm_key_address || (f && f.addr) || 'HmIP-RCV-1', on, off };
+    return { addr: c.alarm_key_address || (f && f.addr) || 'HmIP-RCV-1', on, off, onEv: found.on && found.on.eid, offEv: found.off && found.off.eid };
   }
   _armed(a) {
     const s = this._s(a.state);
@@ -839,6 +839,8 @@ class ZuhauseCard extends HTMLElement {
       const t = id => { const x = this._s(id); const v = x && Date.parse(x.state); return isNaN(v) ? 0 : v || 0; };
       const on = t(a.on), off = t(a.off);
       if (on || off) return on > off;
+      // Event-Entitäten der Tasten: Zustand = Zeitpunkt des letzten Drucks (auch aus CCU-Programmen)
+      if (a.key) { const e1 = t(a.key.onEv), e0 = t(a.key.offEv); if (e1 || e0) return e1 > e0; }
       const l = this._lay && this._lay.alarm_last;
       return l ? !!l.on : null;
     }
@@ -857,6 +859,13 @@ class ZuhauseCard extends HTMLElement {
   }
   _alarmSub(a, armed) {
     const l = this._lay && this._lay.alarm_last;
+    const t = id => { const x = this._s(id); const v = x && Date.parse(x.state); return isNaN(v) ? 0 : v || 0; };
+    const ev = a.key ? Math.max(t(a.key.onEv), t(a.key.offEv)) : 0;
+    if (!a.state && ev) {
+      const d = new Date(ev), now = new Date();
+      const when = (d.toDateString() === now.toDateString() ? '' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ' ') + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      return `seit ${when} Uhr`;
+    }
     if (!a.state && l && l.t) {
       const d = new Date(l.t), now = new Date();
       const when = (d.toDateString() === now.toDateString() ? '' : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ' ') + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
