@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.5.0';
+const VERSION = '2.5.1';
 
 const DEFAULTS = {
   name: '',
@@ -78,7 +78,7 @@ const CSS = `
 .grid{display:grid;gap:12px;grid-template-columns:1fr}
 @media(min-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero,.wide{grid-column:1/-1}}
 @media(min-width:1100px){.grid{grid-template-columns:repeat(12,minmax(0,1fr))}
-  .hero{grid-column:span 12}.energy{grid-column:span 5}.store{grid-column:span 3}.wb{grid-column:span 4}
+  .hero{grid-column:span 12}.energy{grid-column:span 7}.wb{grid-column:span 5}
   .sec{grid-column:span 4}.home{grid-column:span 8}
   .cams{grid-column:span 4}.wx{grid-column:span 8}.hist{grid-column:span 8}.hints{grid-column:span 4}}
 @media(min-width:700px) and (max-width:1099px){.home{grid-column:1/-1}}
@@ -114,7 +114,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .hero .cf button{background:rgba(255,255,255,.16);color:var(--hero-fg)}.hero .cf .y{background:#c83a3a}
 @media(max-width:520px){.hr{width:100%;justify-content:space-between}.hero .alarm{flex:1;min-width:0}}
 /* energy */
-.scene{width:100%;height:auto;display:block;margin:0 0 6px}
+.scene{width:100%;height:auto;max-height:230px;display:block;margin:0 auto 6px}
 .dash{stroke-dasharray:4 6;animation:fl 1.4s linear infinite}
 .dash.idle{animation:none;opacity:.3}
 .dash.rev{animation-direction:reverse}
@@ -357,13 +357,6 @@ class ZuhauseCard extends HTMLElement {
           <div class="tile t-batt"><div class="l">Speicher</div><div class="v num"><span data-k="vbat">–</span><small>%</small></div><div class="s" data-k="sbat"></div></div>
         </div>
         <div class="foot"><span>Heute erzeugt <b class="num" data-k="today">–</b></span><span>Autarkie heute <b class="num" data-k="aut">–</b></span></div>
-      </section>
-
-      <section class="card store">
-        <div class="eyebrow"><span>Speicher</span><span>Anker · Marstek</span></div>
-        <h2>Deine Batterien</h2><p class="sub" data-k="bsub"></p>
-        <div class="pic batpic">${firstPic ? `<img src="${c.images}${firstPic.img}" alt="${firstPic.name}">` : ''}</div>
-        ${bats}
       </section>
 
       <section class="card wb">
@@ -990,12 +983,10 @@ class ZuhauseCard extends HTMLElement {
     c.batteries.forEach((b, i) => {
       const soc = this._n(b.soc), p = this._kw(b.power);
       if (soc === null) {
-        k['bsoc' + i].className = 'pill off'; this._set('bsoc' + i, 'noch nicht verbunden');
-        k['bbar' + i].style.width = '0'; this._set('bsub' + i, 'wird angezeigt, sobald das Gerät in Home Assistant ist');
+        if (k['bsoc' + i]) { k['bsoc' + i].className = 'pill off'; this._set('bsoc' + i, 'noch nicht verbunden'); k['bbar' + i].style.width = '0'; this._set('bsub' + i, 'wird angezeigt, sobald das Gerät in Home Assistant ist'); }
       } else {
         socs.push(soc);
-        k['bsoc' + i].className = 'num'; this._set('bsoc' + i, `${Math.round(soc)} %`);
-        k['bbar' + i].style.width = `${Math.max(0, Math.min(100, soc))}%`;
+        if (k['bsoc' + i]) { k['bsoc' + i].className = 'num'; this._set('bsoc' + i, `${Math.round(soc)} %`); k['bbar' + i].style.width = `${Math.max(0, Math.min(100, soc))}%`; }
         this._set('bsub' + i, p === null ? '' : p > 0.02 ? `lädt ${de(p, 1)} kW` : p < -0.02 ? `entlädt ${de(-p, 1)} kW` : 'Ruhe');
       }
     });
@@ -1130,11 +1121,12 @@ class ZuhauseCard extends HTMLElement {
       const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 6);
       const y0 = new Date(); y0.setHours(0, 0, 0, 0); y0.setDate(y0.getDate() - 1);
       const c = this._cfg, pw = [c.pv, c.grid_in, c.grid_out].filter(Boolean);
-      const [stats, st5, fc, pm] = await Promise.all([
+      const [stats, st5, fc, pm, sth] = await Promise.all([
         this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: start.toISOString(), period: 'day', statistic_ids: ids, types: ['change'], units: { energy: 'kWh' } }),
         this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: y0.toISOString(), period: '5minute', statistic_ids: ids, types: ['change'], units: { energy: 'kWh' } }).catch(() => ({})),
         this._hass.callWS({ type: 'energy/solar_forecast' }).catch(() => null),
         pw.length ? this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: y0.toISOString(), period: '5minute', statistic_ids: pw, types: ['mean'], units: { power: 'kW' } }).catch(() => ({})) : {},
+        this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: y0.toISOString(), period: 'hour', statistic_ids: ids, types: ['change'], units: { energy: 'kWh' } }).catch(() => ({})),
       ]);
       // Woche: kWh pro Tag
       const days = [];
@@ -1169,10 +1161,19 @@ class ZuhauseCard extends HTMLElement {
           const e = q.get(+d) || { pv: 0, gin: 0, gout: 0 }; e[key] += Math.max(0, r.mean || 0) / 12; q.set(+d, e);
         }));
       } else { pvIds.forEach(id => addQ(id, 'pv')); inIds.forEach(id => addQ(id, 'gin')); outIds.forEach(id => addQ(id, 'gout')); }
+      // Lücken (keine Leistungswerte) mit den Stundenwerten der Zähler füllen
+      const hq = new Map();
+      [[pvIds, 'pv'], [inIds, 'gin'], [outIds, 'gout']].forEach(([l, key]) => l.forEach(id => (sth[id] || []).forEach(r => {
+        const e = hq.get(+new Date(r.start)) || { pv: 0, gin: 0, gout: 0 }; e[key] += Math.max(0, r.change || 0); hq.set(+new Date(r.start), e);
+      })));
+      hq.forEach((e, t) => { for (let i = 0; i < 4; i++) { const k = t + i * 900000; if (!q.has(k) && k < Date.now()) q.set(k, { pv: e.pv / 4, gin: e.gin / 4, gout: e.gout / 4 }); } });
+      // Prognose-Summen direkt von Forecast.Solar, falls nicht in der Energie-Konfiguration verknüpft
+      const fsens = re => { const x = Object.values(this._hass.states).find(v => re.test(v.entity_id)); const n = x && parseFloat(x.state); return isNaN(n) ? null : n; };
+      const fsToday = fsens(/^sensor\.energy_production_today(_\d+)?$/), fsTom = fsens(/^sensor\.energy_production_tomorrow(_\d+)?$/);
       // Prognose (Forecast.Solar o. ä.): Wh je Stunde
       const fch = new Map();
       if (fc) Object.entries(fc).forEach(([eid, v]) => { if (fcEntries.length && !fcEntries.includes(eid)) return; Object.entries((v && v.wh_hours) || {}).forEach(([ts, wh]) => { const d = new Date(ts); d.setMinutes(0, 0, 0); fch.set(+d, (fch.get(+d) || 0) + wh / 1000); }); });
-      this._edata = { days, week: [[pv, 'var(--sun)', 'PV-Ertrag'], [gin, 'var(--grid)', 'Netzbezug'], [wb, 'var(--house)', 'Wallbox']], q, fch, hasFc: fch.size > 0, smaToday: smaKwh };
+      this._edata = { days, week: [[pv, 'var(--sun)', 'PV-Ertrag'], [gin, 'var(--grid)', 'Netzbezug'], [wb, 'var(--house)', 'Wallbox']], q, fch, hasFc: fch.size > 0, smaToday: smaKwh, fsToday, fsTom };
       this._drawEnergy();
     } catch (e) {
       this._k.hist.innerHTML = '<p class="sub">Verlauf konnte nicht geladen werden.</p>';
@@ -1222,7 +1223,8 @@ class ZuhauseCard extends HTMLElement {
     k.hist.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Erzeugung und Verbrauch">${g}</svg>`;
     k.hleg.innerHTML = leg([...(tab < 2 ? [['var(--sun)', 'Erzeugung'], ['var(--house)', 'Verbrauch']] : []), ['var(--batt)', 'Erwartete Erzeugung', 1]]);
     if (tab === 1 && D.smaToday !== null) ePv = D.smaToday;
-    const fcTxt = D.hasFc ? `${de(eFc, 1)} kWh` : 'nicht eingerichtet';
+    const fsT = tab === 1 ? D.fsToday : tab === 2 ? D.fsTom : null;
+    const fcTxt = D.hasFc ? `${de(eFc, 1)} kWh` : fsT !== null ? `${de(fsT, 1)} kWh` : 'nicht eingerichtet';
     k.etot.innerHTML = tab < 2
       ? `<div>Erzeugung<b class="num">${de(ePv, 1)} kWh</b></div><div>Verbrauch<b class="num">${de(eUse, 1)} kWh</b></div><div>Prognose<b class="num">${fcTxt}</b></div>`
       : `<div>Erwartete Erzeugung morgen<b class="num">${fcTxt}</b></div>`;
