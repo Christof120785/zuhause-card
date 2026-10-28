@@ -19,7 +19,28 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.7.1';
+const VERSION = '2.8.0';
+
+// Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
+if (!window.__zuhauseUpd) {
+  window.__zuhauseUpd = true;
+  let last = Date.now();
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || Date.now() - last < 30000) return;
+    last = Date.now();
+    try {
+      const r = await fetch('https://raw.githubusercontent.com/Christof120785/zuhause-card/main/card.js?t=' + Date.now(), { cache: 'no-store' });
+      const m = r.ok && (await r.text()).match(/const VERSION = '([^']+)'/);
+      if (m && m[1] !== VERSION) location.reload();
+    } catch (e) { /* offline: alte Version bleibt */ }
+  });
+}
+
+// Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
+const TILES = {
+  energy: ['Energiefluss', 7, 1], wb: ['Wallbox', 5, 1], sec: ['Sicherheit', 4, 1], home: ['Räume', 8, 2],
+  cams: ['Kameras', 4, 1], wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2]
+};
 
 const DEFAULTS = {
   name: '',
@@ -95,10 +116,14 @@ const CSS = `
 .grid{display:grid;gap:12px;grid-template-columns:1fr}
 @media(min-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero,.wide{grid-column:1/-1}}
 @media(min-width:1100px){.grid{grid-template-columns:repeat(12,minmax(0,1fr))}
-  .hero{grid-column:span 12}.energy{grid-column:span 7}.wb{grid-column:span 5}
-  .sec{grid-column:span 4}.home{grid-column:span 8}
-  .cams{grid-column:span 4}.wx{grid-column:span 8}.hist{grid-column:span 12}}
-@media(min-width:700px) and (max-width:1099px){.home{grid-column:1/-1}}
+  .hero{grid-column:span 12}.grid>section[data-sec]{grid-column:span var(--sp,12)}}
+@media(min-width:700px) and (max-width:1099px){.grid>section[data-sec]{grid-column:span var(--sp2,1)}}
+.card.shid{opacity:.45}
+.tbar{display:flex;align-items:center;gap:6px;margin:-4px 0 10px;padding:6px 8px;border:1px dashed var(--line);border-radius:12px;font-size:12px;font-weight:600}
+.tbar span{flex:1}
+.tbar[hidden],.card[hidden]{display:none}
+.tbar button{all:unset;cursor:pointer;min-width:28px;height:28px;padding:0 8px;border-radius:8px;background:var(--line);display:flex;gap:4px;align-items:center;justify-content:center}
+.card .tbar svg{width:15px;height:15px}
 .card{background:var(--card);border-radius:20px;padding:14px 16px;min-width:0;box-shadow:0 1px 2px rgba(20,30,50,.05)}
 .eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;display:flex;justify-content:space-between;gap:8px}
 .eyebrow span:last-child{letter-spacing:.02em;text-transform:none;color:var(--muted)}
@@ -345,7 +370,7 @@ class ZuhauseCard extends HTMLElement {
           <div data-k="alarm"></div></div>
       </section>
 
-      <section class="card energy">
+      <section class="card energy" data-sec="energy">
         <div class="eyebrow"><span>Energie</span><span>● Live</span></div>
         <h2>Dein Energiefluss</h2><p class="sub" data-k="esub"></p>
         <svg class="scene" viewBox="0 0 400 190" role="img" aria-label="Energiefluss">
@@ -377,7 +402,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="foot"><span>Heute erzeugt <b class="num" data-k="today">–</b></span><span>Autarkie heute <b class="num" data-k="aut">–</b></span></div>
       </section>
 
-      <section class="card wb">
+      <section class="card wb" data-sec="wb">
         <div class="eyebrow"><span>Wallbox</span><span>SMA EV Charger</span></div>
         <h2 data-k="wbh">Wallbox</h2><p class="sub" data-k="wbs"></p>
         <div class="wbpics"><div class="pic carpic"><img src="${c.images}auto.webp" alt="Auto"></div><div class="pic wbpic"><img src="${c.images}wallbox.webp" alt="Wallbox"></div></div>
@@ -390,7 +415,7 @@ class ZuhauseCard extends HTMLElement {
         </div>
       </section>
 
-      <section class="card sec">
+      <section class="card sec" data-sec="sec">
         <div class="eyebrow"><span>Sicherheit</span><span>Homematic</span></div>
         <div class="center"><div class="shield" data-k="shield">${svg('shield')}</div>
           <h2 data-k="sech">Alles im Blick</h2><p class="sub" data-k="secs"></p></div>
@@ -399,7 +424,7 @@ class ZuhauseCard extends HTMLElement {
         <div data-k="hints"></div>
       </section>
 
-      <section class="card home">
+      <section class="card home" data-sec="home">
         <div class="hhead"><div><div class="eyebrow"><span>Räume</span></div>
           <h2>Im Haus</h2><p class="sub">Antippen klappt Licht, Szenen, Jalousien und Heizung auf</p></div>
           <button class="arr" data-arrange aria-pressed="false">↕ Anordnen</button></div>
@@ -408,20 +433,20 @@ class ZuhauseCard extends HTMLElement {
         <div class="rg" data-k="rooms"></div>
       </section>
 
-      <section class="card cams">
+      <section class="card cams" data-sec="cams">
         <div class="eyebrow"><span>Kameras</span><span>${[...new Set(this._cams.map(m => m.brand).filter(Boolean))].join(' · ')}</span></div>
         <h2>Rund ums Haus</h2><p class="sub">Antippen öffnet das Livebild</p>
         <div class="camg">${cams}</div>
       </section>
 
-      <section class="card wx">
+      <section class="card wx" data-sec="wx">
         <div class="eyebrow"><span>Wetter</span><span>Vorhersage</span></div>
         <h2>Heute und die nächsten Tage</h2><p class="sub" data-k="wxs"></p>
         <div class="hrs" data-k="fch"></div>
         <div class="fc" data-k="fc"></div>
       </section>
 
-      <section class="card hist chart">
+      <section class="card hist chart" data-sec="hist">
         <div class="eyebrow"><span>Energie</span><span>Bilanz und Prognose</span></div>
         <h2>Erzeugung und Verbrauch</h2>
         <div class="tabs" role="tablist">${['Gestern', 'Heute', 'Morgen', 'Woche'].map((t, i) => `<button role="tab" data-etab="${i}" aria-selected="${i === 1}">${t}</button>`).join('')}</div>
@@ -433,6 +458,9 @@ class ZuhauseCard extends HTMLElement {
 
     this._k = {};
     root.querySelectorAll('[data-k]').forEach(e => { this._k[e.dataset.k] = e; });
+    // Leiste zum Verschieben und Ausblenden der Kacheln (nur bei Anordnen sichtbar)
+    root.querySelectorAll('section[data-sec]').forEach(e => { const b = document.createElement('div'); b.className = 'tbar'; b.hidden = true; e.prepend(b); });
+    this._tileSig = null;
     // Während ein Slider bewegt wird, nicht neu zeichnen
     root.addEventListener('pointerdown', e => { if (e.target.matches('input[type=range]')) this._busy = Date.now() + 60000; });
     root.addEventListener('focusin', e => { if (e.target.matches('input.rn,select')) this._busy = Date.now() + 120000; });
@@ -728,9 +756,44 @@ class ZuhauseCard extends HTMLElement {
     this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'boost' });
   }
 
+  // ---------- Kacheln: Reihenfolge und Ausblenden pro Benutzer ----------
+  _tiles() {
+    const L = this._lay || {}, t = L.tiles || {};
+    const order = (t.order || []).filter(x => TILES[x]);
+    Object.keys(TILES).forEach(x => { if (!order.includes(x)) order.push(x); });
+    return { order, hidden: (t.hidden || []).filter(x => x !== 'home') };
+  }
+  _applyTiles() {
+    const arr = !!this._arrange, { order, hidden } = this._tiles();
+    const sig = arr + '|' + order.join() + '|' + hidden.join();
+    if (sig === this._tileSig) return;
+    this._tileSig = sig;
+    const vis = order.filter(x => arr || !hidden.includes(x));
+    // Breiten so verteilen, dass keine Lücke bleibt, wenn eine Kachel fehlt
+    const pack = (cols, w) => {
+      const out = {}; let row = [], sum = 0;
+      const close = () => { if (row.length) out[row[row.length - 1]] += cols - sum; row = []; sum = 0; };
+      vis.forEach(x => { const n = Math.min(cols, w(x)); if (sum + n > cols) close(); out[x] = n; row.push(x); sum += n; });
+      close(); return out;
+    };
+    const wide = pack(12, x => TILES[x][1]), mid = pack(2, x => TILES[x][2]);
+    order.forEach((x, i) => {
+      const e = this.shadowRoot.querySelector(`section[data-sec="${x}"]`); if (!e) return;
+      const hid = hidden.includes(x), b = e.querySelector('.tbar');
+      e.style.order = i + 1;
+      e.hidden = hid && !arr;
+      e.classList.toggle('shid', hid && arr);
+      if (wide[x]) { e.style.setProperty('--sp', wide[x]); e.style.setProperty('--sp2', mid[x]); }
+      b.hidden = !arr;
+      b.innerHTML = arr ? `<span>${TILES[x][0]}</span><button data-tmv="${x}|-1" aria-label="${TILES[x][0]} nach oben">↑</button><button data-tmv="${x}|1" aria-label="${TILES[x][0]} nach unten">↓</button>`
+        + (x === 'home' ? '' : `<button data-thide="${x}">${svg('eye')} ${hid ? 'Einblenden' : 'Ausblenden'}</button>`) : '';
+    });
+  }
+
   _renderRooms() {
     const k = this._k;
     if (!k.rooms) return;
+    this._applyTiles();
     const rooms = this._rooms(), lay = this._lay || { hidden: [] }, arr = !!this._arrange;
     this._roomList = rooms;
     this._cleanBoost();
@@ -855,8 +918,16 @@ class ZuhauseCard extends HTMLElement {
     const d = t.dataset, h = this._hass, rooms = this._roomList || [];
     const room = id => rooms.find(r => r.id === id);
     const done = () => { this._roomSig = null; this._busy = 0; this._renderRooms(); return true; };
-    if (!this._lay && (d.mv || d.hide || d.boost || d.q)) return true;
+    if (!this._lay && (d.mv || d.hide || d.boost || d.q || d.tmv || d.thide)) return true;
     if (t.hasAttribute('data-arrange')) { this._arrange = !this._arrange; return done(); }
+    if (d.tmv || d.thide) {
+      const T = this._tiles();
+      if (d.tmv) {
+        const [id, st] = d.tmv.split('|'), i = T.order.indexOf(id), j = i + +st;
+        if (j >= 0 && j < T.order.length) { T.order.splice(i, 1); T.order.splice(j, 0, id); }
+      } else T.hidden = T.hidden.includes(d.thide) ? T.hidden.filter(x => x !== d.thide) : [...T.hidden, d.thide];
+      this._lay.tiles = T; this._save(); return done();
+    }
     if (d.mv) {
       const [id, st] = d.mv.split('|');
       const ids = rooms.map(r => r.id), i = ids.indexOf(id), j = i + +st;
