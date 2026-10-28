@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.4.4';
+const VERSION = '2.5.0';
 
 const DEFAULTS = {
   name: '',
@@ -63,7 +63,9 @@ function wxIcon(c) {
   const cl = '<path d="M9 25h14a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2A4 4 0 0 0 9 25z" fill="var(--faint)"/>';
   const rn = '<g stroke="var(--grid)" stroke-width="2" stroke-linecap="round"><path d="M12 28l-1 3M17 28l-1 3M22 28l-1 3"/></g>';
   let g = cl;
-  if (c === 'sunny' || c === 'clear-night') g = sun;
+  const moon = '<path d="M20 7a9 9 0 1 0 6 13 7 7 0 0 1-6-13z" fill="var(--grid)"/>';
+  if (c === 'sunny') g = sun;
+  else if (c === 'clear-night') g = moon;
   else if (c === 'partlycloudy') g = '<circle cx="12" cy="12" r="5" fill="var(--sun)"/>' + cl;
   else if (/rain|pouring|lightning|hail|snow/.test(c || '')) g = cl + rn;
   return `<svg viewBox="0 0 32 34" aria-hidden="true">${g}</svg>`;
@@ -95,7 +97,7 @@ const CSS = `
 @media(min-width:1100px){.grid{grid-template-columns:repeat(12,minmax(0,1fr))}
   .hero{grid-column:span 12}.energy{grid-column:span 5}.store{grid-column:span 3}.wb{grid-column:span 4}
   .sec{grid-column:span 4}.home{grid-column:span 8}
-  .cams{grid-column:span 4}.wx{grid-column:span 4}.hints{grid-column:span 4}.hist{grid-column:span 12}}
+  .cams{grid-column:span 4}.wx{grid-column:span 8}.hist{grid-column:span 8}.hints{grid-column:span 4}}
 @media(min-width:700px) and (max-width:1099px){.home{grid-column:1/-1}}
 .card{background:var(--card);border-radius:20px;padding:14px 16px;min-width:0;box-shadow:0 1px 2px rgba(20,30,50,.05)}
 .eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;display:flex;justify-content:space-between;gap:8px}
@@ -119,6 +121,15 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .wxn .t{font-family:var(--display);font-size:30px;font-weight:600}
 .wxn .t small{font-size:14px;color:var(--hero-mut)}
 .wxn div{font-size:12px;color:var(--hero-mut)}
+/* Alarm im Kopf */
+.hr{display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;justify-content:flex-end}
+.hr .wxn{align-self:flex-end}
+.hero .alarm{margin:0;background:rgba(98,196,139,.16);color:var(--hero-fg);grid-template-columns:1fr;min-width:230px}
+.hero .alarm.on{background:rgba(239,138,74,.22)}
+.hero .alarm span{color:var(--hero-mut)}
+.hero .alarm .st svg{color:#7fd6a2}.hero .alarm.on .st svg{color:#ffb07a}
+.hero .cf button{background:rgba(255,255,255,.16);color:var(--hero-fg)}.hero .cf .y{background:#c83a3a}
+@media(max-width:520px){.hr{width:100%;justify-content:space-between}.hero .alarm{flex:1;min-width:0}}
 /* energy */
 .scene{width:100%;height:auto;display:block;margin:0 0 6px}
 .dash{stroke-dasharray:4 6;animation:fl 1.4s linear infinite}
@@ -253,10 +264,24 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .fc div{background:var(--tile);border-radius:12px;padding:6px 2px;font-size:11.5px}
 .fc b{display:block;font-size:12.5px}
 .fc svg{width:24px;height:24px;display:block;margin:3px auto}
+/* Stundenwetter */
+.hrs{overflow-x:auto;margin:0 -4px 10px;padding:0 4px;scrollbar-width:thin}
+.hrs>svg{display:block;height:150px}
+.hrs text{font-family:var(--body);font-size:11.5px;fill:var(--muted)}
+.hrs .tt{font-size:13px;font-weight:600;fill:var(--fg)}
+.hrs .rp{font-size:10.5px;fill:var(--grid)}
+/* Energie-Reiter */
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0 10px}
+.tabs button{all:unset;cursor:pointer;text-align:center;border:1px solid var(--line);border-radius:10px;padding:7px 4px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--grid-soft);border-color:var(--grid);color:var(--grid)}
+.etot{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:10px}
+.etot div{background:var(--tile);border-radius:12px;padding:8px 10px;font-size:11.5px;color:var(--muted)}
+.etot b{display:block;font-family:var(--display);font-size:17px;color:var(--fg);font-weight:600}
 /* history */
 .chart svg{width:100%;height:auto;display:block}
 .chart text{font-size:10px;fill:var(--faint);font-family:var(--body)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:4px}
+.legend span.dsh::before{height:0;border-top:2px dashed var(--c);background:none;border-radius:0}
 .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:var(--c);vertical-align:-1px}
 .btn{all:unset;cursor:pointer;display:flex;justify-content:space-between;background:var(--batt-soft);color:var(--ok);border-radius:12px;padding:9px 12px;font-size:12.5px;font-weight:600}
 `;
@@ -315,7 +340,8 @@ class ZuhauseCard extends HTMLElement {
         <div><h1><span data-k="greet">Hallo</span>,<br><em>${c.name}.</em></h1>
           <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
           <div class="chips"><span class="chip" data-k="chOpen"></span><span class="chip" data-k="chLights"></span></div></div>
-        <div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
+        <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
+          <div data-k="alarm"></div></div>
       </section>
 
       <section class="card energy">
@@ -382,7 +408,6 @@ class ZuhauseCard extends HTMLElement {
         <div class="hhead"><div><div class="eyebrow"><span>Räume</span></div>
           <h2>Im Haus</h2><p class="sub">Antippen klappt Licht, Szenen, Jalousien und Heizung auf</p></div>
           <button class="arr" data-arrange aria-pressed="false">↕ Anordnen</button></div>
-        <div data-k="alarm"></div>
         <div class="quick" data-k="quick"></div>
         <div data-k="ahint"></div>
         <div class="rg" data-k="rooms"></div>
@@ -396,7 +421,8 @@ class ZuhauseCard extends HTMLElement {
 
       <section class="card wx">
         <div class="eyebrow"><span>Wetter</span><span>Vorhersage</span></div>
-        <h2>Die nächsten Tage</h2><p class="sub" data-k="wxs"></p>
+        <h2>Heute und die nächsten Tage</h2><p class="sub" data-k="wxs"></p>
+        <div class="hrs" data-k="fch"></div>
         <div class="fc" data-k="fc"></div>
       </section>
 
@@ -407,10 +433,12 @@ class ZuhauseCard extends HTMLElement {
       </section>
 
       <section class="card hist chart">
-        <div class="eyebrow"><span>Energie</span><span>letzte 7 Tage</span></div>
-        <h2>Erzeugung und Verbrauch</h2><p class="sub">kWh pro Tag, aus deiner Energie-Konfiguration</p>
+        <div class="eyebrow"><span>Energie</span><span>Bilanz und Prognose</span></div>
+        <h2>Erzeugung und Verbrauch</h2>
+        <div class="tabs" role="tablist">${['Gestern', 'Heute', 'Morgen', 'Woche'].map((t, i) => `<button role="tab" data-etab="${i}" aria-selected="${i === 1}">${t}</button>`).join('')}</div>
         <div data-k="hist"></div>
-        <div class="legend"><span style="--c:var(--sun)">PV-Ertrag</span><span style="--c:var(--grid)">Netzbezug</span><span style="--c:var(--house)">Wallbox</span></div>
+        <div class="legend" data-k="hleg"></div>
+        <div class="etot" data-k="etot"></div>
       </section>
     </div></div>`;
 
@@ -448,6 +476,8 @@ class ZuhauseCard extends HTMLElement {
     root.addEventListener('click', e => {
       if (e.target.closest('input,select')) return;
       if (this._roomClick(e)) return;
+      const et = e.target.closest('[data-etab]');
+      if (et) { this._etab = +et.dataset.etab; this._drawEnergy(); return; }
       const t = e.target.closest('[data-toggle]');
       if (t) {
         const id = t.dataset.toggle;
@@ -1075,14 +1105,35 @@ class ZuhauseCard extends HTMLElement {
       }).join('');
       if (fc[1]) this._set('wxs', `Morgen ${WX[fc[1].condition] || ''}, bis ${Math.round(fc[1].temperature)} °C`);
     }, { type: 'weather/subscribe_forecast', forecast_type: 'daily', entity_id: this._cfg.weather }).catch(() => { this._fcSub = false; });
+    this._hass.connection.subscribeMessage(msg => { this._hourly = (msg.forecast || []).slice(0, 24); this._drawHourly(); },
+      { type: 'weather/subscribe_forecast', forecast_type: 'hourly', entity_id: this._cfg.weather }).catch(() => {});
+  }
+
+  // Stundenvorhersage: Temperaturlinie mit Symbol, Uhrzeit und Regenwahrscheinlichkeit
+  _drawHourly() {
+    const k = this._k.fch, fc = this._hourly || []; if (!k || !fc.length) return;
+    const cw = 52, W = cw * fc.length, ts = fc.map(f => f.temperature);
+    const lo = Math.min(...ts), hi = Math.max(...ts), y = v => 58 - (hi === lo ? 0.5 : (v - lo) / (hi - lo)) * 34;
+    let g = `<polyline fill="none" stroke="var(--sun)" stroke-width="2" points="${fc.map((f, i) => `${i * cw + cw / 2},${y(f.temperature)}`).join(' ')}"/>`;
+    fc.forEach((f, i) => {
+      const x = i * cw + cw / 2, d = new Date(f.datetime), p = f.precipitation_probability;
+      g += `<text class="tt" x="${x}" y="${y(f.temperature) - 8}" text-anchor="middle">${Math.round(f.temperature)}°</text>`
+        + `<circle cx="${x}" cy="${y(f.temperature)}" r="2.5" fill="var(--sun)"/>`
+        + wxIcon(f.condition).replace('<svg ', `<svg x="${x - 14}" y="70" width="28" height="30" `)
+        + (p ? `<text class="rp" x="${x}" y="114" text-anchor="middle">${Math.round(p)} %</text>` : (f.precipitation ? `<text class="rp" x="${x}" y="114" text-anchor="middle">${de(f.precipitation, 1)} mm</text>` : ''))
+        + `<text x="${x}" y="134" text-anchor="middle">${i === 0 ? 'Jetzt' : d.getHours() === 0 ? DAYS[d.getDay()] : String(d.getHours()).padStart(2, '0') + ':00'}</text>`;
+    });
+    const html = `<svg viewBox="0 0 ${W} 142" width="${W}" role="img" aria-label="Wetter der nächsten 24 Stunden">${g}</svg>`;
+    if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
   }
 
   async _loadHistory() {
     try {
       const prefs = await this._hass.callWS({ type: 'energy/get_prefs' });
-      let pvId = null, inIds = [], outIds = [], wbId = null;
+      const pvIds = [], inIds = [], outIds = [], fcEntries = [];
+      let wbId = null;
       (prefs.energy_sources || []).forEach(s => {
-        if (s.type === 'solar' && !pvId) pvId = s.stat_energy_from;
+        if (s.type === 'solar') { if (s.stat_energy_from) pvIds.push(s.stat_energy_from); (s.config_entry_solar_forecast || []).forEach(x => fcEntries.push(x)); }
         if (s.type === 'grid') {
           (s.flow_from || []).forEach(f => inIds.push(f.stat_energy_from));
           (s.flow_to || []).forEach(f => outIds.push(f.stat_energy_to));
@@ -1091,29 +1142,107 @@ class ZuhauseCard extends HTMLElement {
         }
       });
       (prefs.device_consumption || []).forEach(d => { if (/ladestation|smaev|wallbox/i.test(d.stat_consumption)) wbId = d.stat_consumption; });
-      const ids = [pvId, ...inIds, ...outIds, wbId].filter(Boolean);
+      const ids = [...pvIds, ...inIds, ...outIds, wbId].filter(Boolean);
       if (!ids.length) { this._k.hist.innerHTML = '<p class="sub">Keine Energie-Konfiguration gefunden.</p>'; return; }
       const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 6);
-      const stats = await this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: start.toISOString(), period: 'day', statistic_ids: ids, types: ['change'], units: { energy: 'kWh' } });
+      const y0 = new Date(); y0.setHours(0, 0, 0, 0); y0.setDate(y0.getDate() - 1);
+      const c = this._cfg, pw = [c.pv, c.grid_in, c.grid_out].filter(Boolean);
+      const [stats, st5, fc, pm] = await Promise.all([
+        this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: start.toISOString(), period: 'day', statistic_ids: ids, types: ['change'], units: { energy: 'kWh' } }),
+        this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: y0.toISOString(), period: '5minute', statistic_ids: ids, types: ['change'], units: { energy: 'kWh' } }).catch(() => ({})),
+        this._hass.callWS({ type: 'energy/solar_forecast' }).catch(() => null),
+        pw.length ? this._hass.callWS({ type: 'recorder/statistics_during_period', start_time: y0.toISOString(), period: '5minute', statistic_ids: pw, types: ['mean'], units: { power: 'kW' } }).catch(() => ({})) : {},
+      ]);
+      // Woche: kWh pro Tag
       const days = [];
       for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
       const series = id => days.map(d => {
         const row = (stats[id] || []).find(r => new Date(r.start).toDateString() === d.toDateString());
         return row && row.change ? Math.max(0, row.change) : 0;
       });
-      const sum = arr => arr.reduce((a, b) => a.map((x, i) => x + b[i]), days.map(() => 0));
-      const pv = pvId ? series(pvId) : days.map(() => 0);
-      const gin = sum(inIds.map(series)), gout = sum(outIds.map(series));
-      const wb = wbId ? series(wbId) : days.map(() => 0);
+      const zero = () => days.map(() => 0);
+      const sum = arr => arr.reduce((a, b) => a.map((x, i) => x + b[i]), zero());
+      const pv = sum(pvIds.map(series)), gin = sum(inIds.map(series)), gout = sum(outIds.map(series));
+      const wb = wbId ? series(wbId) : zero();
       const t = 6;
+      // SMA hat Vorrang: Tagesertrag direkt vom Wechselrichter
+      const sma = Object.values(this._hass.states).find(x => /^sensor\.sn_\d+_daily_yield$/.test(x.entity_id) || /tagesertrag|daily yield/i.test(x.attributes.friendly_name || ''));
+      const smaKwh = sma && !isNaN(parseFloat(sma.state)) ? parseFloat(sma.state) / ((sma.attributes.unit_of_measurement || '').toLowerCase() === 'wh' ? 1000 : 1) : null;
+      if (smaKwh !== null) pv[t] = smaKwh;
       this._set('today', `${de(pv[t], 1)} kWh`);
       const use = pv[t] + gin[t] - gout[t];
       this._set('aut', use > 0 ? `${Math.round(Math.max(0, Math.min(1, 1 - gin[t] / use)) * 100)} %` : '–');
       this._set('wbtoday', de(wb[t], 1));
-      this._drawHist(days, [[pv, 'var(--sun)'], [gin, 'var(--grid)'], [wb, 'var(--house)']]);
+      // Gestern/Heute: Leistung je Viertelstunde in kW (aus 5-Minuten-Statistik)
+      const q = new Map();
+      const addQ = (id, key) => (st5[id] || []).forEach(r => {
+        const d = new Date(r.start); d.setMinutes(Math.floor(d.getMinutes() / 15) * 15, 0, 0);
+        const e = q.get(+d) || { pv: 0, gin: 0, gout: 0 }; e[key] += Math.max(0, r.change || 0); q.set(+d, e);
+      });
+      // bevorzugt: Leistung direkt (SMA-Wechselrichter und Netzzähler), Mittelwert je Viertelstunde
+      if (c.pv && (pm[c.pv] || []).length) {
+        [[c.pv, 'pv'], [c.grid_in, 'gin'], [c.grid_out, 'gout']].forEach(([id, key]) => id && (pm[id] || []).forEach(r => {
+          const d = new Date(r.start); d.setMinutes(Math.floor(d.getMinutes() / 15) * 15, 0, 0);
+          const e = q.get(+d) || { pv: 0, gin: 0, gout: 0 }; e[key] += Math.max(0, r.mean || 0) / 12; q.set(+d, e);
+        }));
+      } else { pvIds.forEach(id => addQ(id, 'pv')); inIds.forEach(id => addQ(id, 'gin')); outIds.forEach(id => addQ(id, 'gout')); }
+      // Prognose (Forecast.Solar o. ä.): Wh je Stunde
+      const fch = new Map();
+      if (fc) Object.entries(fc).forEach(([eid, v]) => { if (fcEntries.length && !fcEntries.includes(eid)) return; Object.entries((v && v.wh_hours) || {}).forEach(([ts, wh]) => { const d = new Date(ts); d.setMinutes(0, 0, 0); fch.set(+d, (fch.get(+d) || 0) + wh / 1000); }); });
+      this._edata = { days, week: [[pv, 'var(--sun)', 'PV-Ertrag'], [gin, 'var(--grid)', 'Netzbezug'], [wb, 'var(--house)', 'Wallbox']], q, fch, hasFc: fch.size > 0, smaToday: smaKwh };
+      this._drawEnergy();
     } catch (e) {
       this._k.hist.innerHTML = '<p class="sub">Verlauf konnte nicht geladen werden.</p>';
     }
+  }
+
+  _drawEnergy() {
+    const D = this._edata, k = this._k; if (!D) return;
+    const tab = this._etab === undefined ? 1 : this._etab;
+    this.shadowRoot.querySelectorAll('[data-etab]').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.etab === tab)));
+    const leg = a => a.map(([c, n, dash]) => `<span style="--c:${c}"${dash ? ' class="dsh"' : ''}>${n}</span>`).join('');
+    if (tab === 3) {
+      this._drawHist(D.days, D.week);
+      k.hleg.innerHTML = leg(D.week.map(w => [w[1], w[2]]));
+      const tot = i => D.week[i][0].reduce((a, b) => a + b, 0);
+      k.etot.innerHTML = `<div>Erzeugt in 7 Tagen<b class="num">${de(tot(0), 0)} kWh</b></div><div>Netzbezug<b class="num">${de(tot(1), 0)} kWh</b></div><div>Wallbox<b class="num">${de(tot(2), 0)} kWh</b></div>`;
+      return;
+    }
+    const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() + tab - 1);
+    const pts = [];
+    let ePv = 0, eUse = 0, eFc = 0;
+    for (let i = 0; i < 96; i++) {
+      const t = +day + i * 900000, e = D.q.get(t), hr = new Date(t); hr.setMinutes(0, 0, 0);
+      const f = D.fch.has(+hr) ? D.fch.get(+hr) : null;
+      const p = e ? { pv: e.pv * 4, use: Math.max(0, e.pv + e.gin - e.gout) * 4 } : null;
+      if (p) { ePv += p.pv / 4; eUse += p.use / 4; }
+      if (f !== null && i % 4 === 0) eFc += f;
+      pts.push({ t, p, f });
+    }
+    const W = Math.max(320, Math.round(k.hist.clientWidth || 600)), H = 190, l = 30, b = 22, tp = 10;
+    const peak = Math.max(1, ...pts.map(x => Math.max(x.p ? Math.max(x.p.pv, x.p.use) : 0, x.f || 0)));
+    const step = peak > 8 ? 2 : peak > 4 ? 1 : peak > 2 ? 0.5 : 0.25, max = Math.ceil(peak / step) * step;
+    const X = i => l + (W - l - 6) * i / 96, Y = v => tp + (H - tp - b) * (1 - v / max);
+    let g = '';
+    for (let v = 0; v <= max + 1e-9; v += step) g += `<line x1="${l}" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${l - 5}" y="${Y(v) + 3}" text-anchor="end">${de(v, step < 0.5 ? 2 : step < 1 ? 1 : 0)}</text>`;
+    for (let h = 4; h < 24; h += 4) g += `<text x="${X(h * 4)}" y="${H - 5}" text-anchor="middle">${String(h).padStart(2, '0')} Uhr</text>`;
+    const area = (key, col, op) => {
+      const seg = []; let cur = [];
+      pts.forEach((x, i) => { if (x.p) cur.push([X(i), Y(x.p[key])]); else if (cur.length) { seg.push(cur); cur = []; } });
+      if (cur.length) seg.push(cur);
+      return seg.map(c => `<path d="M${c[0][0]},${Y(0)} L${c.map(p => p.join(',')).join(' L')} L${c[c.length - 1][0]},${Y(0)} Z" fill="${col}" fill-opacity="${op}"/><polyline fill="none" stroke="${col}" stroke-width="1.6" points="${c.map(p => p.join(',')).join(' ')}"/>`).join('');
+    };
+    g += area('pv', 'var(--sun)', 0.35) + area('use', 'var(--house)', 0.12);
+    const fpts = pts.map((x, i) => x.f !== null && i % 4 === 2 ? [X(i), Y(x.f)] : null).filter(Boolean);
+    if (fpts.length) g += `<polyline fill="none" stroke="var(--batt)" stroke-width="2" stroke-dasharray="4 4" points="${fpts.map(p => p.join(',')).join(' ')}"/>`;
+    if (tab === 1) { const n = (Date.now() - +day) / 900000; g += `<line x1="${X(n)}" x2="${X(n)}" y1="${tp}" y2="${Y(0)}" stroke="var(--grid)" stroke-width="1.5"/>`; }
+    k.hist.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Erzeugung und Verbrauch">${g}</svg>`;
+    k.hleg.innerHTML = leg([...(tab < 2 ? [['var(--sun)', 'Erzeugung'], ['var(--house)', 'Verbrauch']] : []), ['var(--batt)', 'Erwartete Erzeugung', 1]]);
+    if (tab === 1 && D.smaToday !== null) ePv = D.smaToday;
+    const fcTxt = D.hasFc ? `${de(eFc, 1)} kWh` : 'nicht eingerichtet';
+    k.etot.innerHTML = tab < 2
+      ? `<div>Erzeugung<b class="num">${de(ePv, 1)} kWh</b></div><div>Verbrauch<b class="num">${de(eUse, 1)} kWh</b></div><div>Prognose<b class="num">${fcTxt}</b></div>`
+      : `<div>Erwartete Erzeugung morgen<b class="num">${fcTxt}</b></div>`;
   }
 
   _drawHist(days, sets) {
