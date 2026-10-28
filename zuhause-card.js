@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.11.0';
+const VERSION = '2.11.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -78,18 +78,28 @@ function lev(a, b) {
     d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
   return d[a.length][b.length];
 }
+const WXS = { 'clear-night': 'Klar', cloudy: 'Wolken', fog: 'Nebel', hail: 'Hagel', lightning: 'Gewitter', 'lightning-rainy': 'Gewitter', partlycloudy: 'Heiter', pouring: 'Starkregen', rainy: 'Regen', snowy: 'Schnee', 'snowy-rainy': 'Schneeregen', sunny: 'Sonne', windy: 'Wind', 'windy-variant': 'Wind', exceptional: 'Unwetter' };
 const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
 function wxIcon(c) {
-  const sun = '<circle cx="16" cy="16" r="6" fill="var(--sun)"/>';
+  c = c || '';
+  const sun = '<circle cx="16" cy="16" r="6" fill="var(--sun)"/><g stroke="var(--sun)" stroke-width="2" stroke-linecap="round"><path d="M16 4v3M16 25v3M4 16h3M25 16h3M7.5 7.5l2 2M22.5 22.5l2 2M7.5 24.5l2-2M22.5 9.5l2-2"/></g>';
   const cl = '<path d="M9 25h14a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2A4 4 0 0 0 9 25z" fill="var(--faint)"/>';
-  const rn = '<g stroke="var(--grid)" stroke-width="2" stroke-linecap="round"><path d="M12 28l-1 3M17 28l-1 3M22 28l-1 3"/></g>';
-  let g = cl;
+  const dk = '<path d="M9 25h14a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2A4 4 0 0 0 9 25z" fill="var(--muted)"/>';
+  const rn = '<g stroke="#3f78c4" stroke-width="2" stroke-linecap="round"><path d="M12 28l-1 3M17 28l-1 3M22 28l-1 3"/></g>';
+  const rn2 = '<g stroke="#3f78c4" stroke-width="2" stroke-linecap="round"><path d="M10 28l-1.5 4M14 28l-1.5 4M18 28l-1.5 4M22 28l-1.5 4"/></g>';
+  const sn = '<g fill="#7fb2e6"><circle cx="11" cy="29.5" r="1.8"/><circle cx="16.5" cy="31" r="1.8"/><circle cx="22" cy="29.5" r="1.8"/></g>';
+  const bolt = '<path d="M17 24l-4 6h3l-2 4 6-7h-3l2-3z" fill="var(--sun)"/>';
+  const hl = '<g fill="#9fb3c8"><circle cx="11" cy="30" r="2"/><circle cx="17" cy="31" r="2"/><circle cx="23" cy="30" r="2"/></g>';
+  const fg = '<g stroke="var(--faint)" stroke-width="2.2" stroke-linecap="round"><path d="M6 14h20M4 19h24M7 24h18M10 29h12"/></g>';
+  const wd = '<g fill="none" stroke="var(--faint)" stroke-width="2.2" stroke-linecap="round"><path d="M4 13h16a3.5 3.5 0 1 0-3.5-3.5M4 19h21a3.5 3.5 0 1 1-3.5 3.5M4 25h11"/></g>';
   const moon = '<path d="M20 7a9 9 0 1 0 6 13 7 7 0 0 1-6-13z" fill="var(--grid)"/>';
-  if (c === 'sunny') g = sun;
-  else if (c === 'clear-night') g = moon;
-  else if (c === 'partlycloudy') g = '<circle cx="12" cy="12" r="5" fill="var(--sun)"/>' + cl;
-  else if (/rain|pouring|lightning|hail|snow/.test(c || '')) g = cl + rn;
+  const g = c === 'sunny' ? sun : c === 'clear-night' ? moon
+    : c === 'partlycloudy' ? '<circle cx="12" cy="12" r="5" fill="var(--sun)"/>' + cl
+    : c === 'pouring' ? dk + rn2 : c === 'rainy' ? cl + rn
+    : c === 'snowy' ? cl + sn : c === 'snowy-rainy' ? cl + '<g stroke="#3f78c4" stroke-width="2" stroke-linecap="round"><path d="M12 28l-1 3M22 28l-1 3"/></g><circle cx="17" cy="30" r="1.8" fill="#7fb2e6"/>'
+    : c === 'lightning' ? dk + bolt : c === 'lightning-rainy' ? dk + bolt + '<g stroke="#3f78c4" stroke-width="2" stroke-linecap="round"><path d="M10 28l-1 3M24 28l-1 3"/></g>'
+    : c === 'hail' ? cl + hl : c === 'fog' ? fg : /windy/.test(c) ? wd : c === 'exceptional' ? dk + bolt : c === 'cloudy' ? '<path d="M14 15a6 6 0 0 1 11 2" fill="none" stroke="var(--faint)" stroke-width="2"/>' + cl : cl;
   return `<svg viewBox="0 0 32 34" aria-hidden="true">${g}</svg>`;
 }
 
@@ -294,7 +304,10 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .fc{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;text-align:center}
 .fc div{background:var(--tile);border-radius:12px;padding:6px 2px;font-size:11.5px}
 .fc b{display:block;font-size:12.5px}
-.fc svg{width:24px;height:24px;display:block;margin:3px auto}
+.fc svg{width:26px;height:26px;display:block;margin:3px auto}
+.fc .wl{display:block;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.fc .pp svg.dr{display:inline-block;width:8px;height:10px;margin:0 3px 0 0;vertical-align:-1px}
+.fc .pp{display:block;margin-top:3px;font-size:11px;color:#3f78c4;font-weight:600}
 /* Stundenwetter */
 .hrs{overflow-x:auto;margin:0 -4px 10px;padding:0 4px;scrollbar-width:thin}
 .rainw{display:flex;align-items:center;gap:8px;margin:2px 0 10px;padding:8px 12px;border-radius:12px;background:rgba(63,120,196,.14);color:var(--fg);font-size:14px}
@@ -1351,7 +1364,8 @@ class ZuhauseCard extends HTMLElement {
       const k = this._k.fc; if (!k) return;
       k.innerHTML = fc.map(d => {
         const dt = new Date(d.datetime);
-        return `<div>${DAYS[dt.getDay()]}${wxIcon(d.condition)}<b class="num">${Math.round(d.temperature)}°</b><span class="num" style="color:var(--muted)">${d.templow != null ? Math.round(d.templow) + '°' : ''}</span></div>`;
+        const pp = d.precipitation_probability;
+        return `<div title="${WX[d.condition] || ''}">${DAYS[dt.getDay()]}${wxIcon(d.condition)}<span class="wl">${WXS[d.condition] || ''}</span><b class="num">${Math.round(d.temperature)}°</b><span class="num" style="color:var(--muted)">${d.templow != null ? Math.round(d.templow) + '°' : ''}</span><span class="pp num"><svg class="dr" viewBox="0 0 10 12"><path d="M5 0C3 3.5 1 5.6 1 7.8a4 4 0 0 0 8 0C9 5.6 7 3.5 5 0z" fill="currentColor"/></svg>${pp != null ? Math.round(pp) + ' %' : de(d.precipitation || 0, 1) + ' mm'}</span></div>`;
       }).join('');
       if (fc[1]) this._set('wxs', `Morgen ${WX[fc[1].condition] || ''}, bis ${Math.round(fc[1].temperature)} °C`);
     }, { type: 'weather/subscribe_forecast', forecast_type: 'daily', entity_id: this._cfg.weather }).catch(() => { this._fcSub = false; });
