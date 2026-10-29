@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.19.0';
+const VERSION = '2.19.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -446,6 +446,15 @@ class ZuhauseCard extends HTMLElement {
     if (!ch && !dis) return null;
     return (ch ? this._kw(ch.entity_id) || 0 : 0) - (dis ? this._kw(dis.entity_id) || 0 : 0);
   }
+  // Dimmen: bei einer Lampengruppe (z. B. nach einer Szene) nur die Lampen ändern, die schon an sind, und zwar relativ,
+  // damit die Szene erhalten bleibt und ausgeschaltete Lampen aus bleiben
+  _dim(eid, pct) {
+    const s = this._s(eid), mem = (s && s.attributes.entity_id || []).map(x => this._s(x)).filter(x => x && x.state === 'on');
+    if (s && s.state === 'on' && mem.length && mem.length < (s.attributes.entity_id || []).length) {
+      const cur = this._pct(s) || 100;
+      this._hass.callService('light', 'turn_on', { entity_id: mem.map(x => x.entity_id), brightness_step_pct: pct - cur });
+    } else this._hass.callService('light', 'turn_on', { entity_id: eid, brightness_pct: pct });
+  }
   _flow(key, on, rev) {
     const k = this._k; if (!k[key]) return;
     k[key].classList.toggle('idle', !on);
@@ -573,7 +582,7 @@ class ZuhauseCard extends HTMLElement {
     });
     root.addEventListener('change', e => {
       const t = e.target;
-      if (t.dataset.dim) this._hass.callService('light', 'turn_on', { entity_id: t.dataset.dim, brightness_pct: +t.value });
+      if (t.dataset.dim) this._dim(t.dataset.dim, +t.value);
       if (t.dataset.pos) this._hass.callService('cover', 'set_cover_position', { entity_id: t.dataset.pos, position: +t.value });
       if (this._lay && (t.dataset.rname || t.dataset.dname || t.dataset.droom)) {
         const L = this._lay; L.names = L.names || {}; L.dev = L.dev || {};
