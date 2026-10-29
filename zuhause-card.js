@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.15.0';
+const VERSION = '2.15.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -196,6 +196,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .wbpics{display:grid;grid-template-columns:3fr 1fr;gap:8px;margin:4px 0 8px}
 .carpic img{width:86%}.wbpic img{width:80%}
 .mini{all:unset;cursor:pointer;margin-left:8px;font-size:12px;color:var(--grid);padding:4px 8px;border-radius:8px;background:var(--tile)}
+.htip{font-size:12.5px;margin:4px 0 2px;min-height:18px;color:var(--fg)}
 .segs{display:flex;gap:8px;margin-top:10px}
 .seg{all:unset;cursor:pointer;flex:1;text-align:center;padding:10px 8px;border-radius:12px;background:var(--tile);font-size:13.5px;font-weight:600;color:var(--fg)}
 .seg.on{background:var(--sun);color:#fff}
@@ -500,7 +501,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="eyebrow"><span>Energie</span><span>Bilanz und Prognose</span></div>
         <h2>Erzeugung und Verbrauch</h2>
         <div class="tabs" role="tablist">${['Gestern', 'Heute', 'Morgen', 'Woche'].map((t, i) => `<button role="tab" data-etab="${i}" aria-selected="${i === 1}">${t}</button>`).join('')}</div>
-        <div data-k="hist"></div>
+        <div data-k="hist"></div><div class="htip" data-k="htip"></div>
         <div class="legend" data-k="hleg"></div>
         <div class="etot" data-k="etot"></div>
       </section>
@@ -549,6 +550,12 @@ class ZuhauseCard extends HTMLElement {
       if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return; }
       const nb = e.target.closest('[data-notif]');
       if (nb) { this._notifAction(nb.dataset.notif); return; }
+      const hs = e.target.closest('[data-k="hist"]');
+      if (hs && this._eGeo && this._eGeo.tab !== 3) {
+        const r = hs.getBoundingClientRect(), G = this._eGeo, xv = (e.clientX - r.left) / r.width * G.W;
+        const i = Math.max(0, Math.min(G.n - 1, Math.round((xv - G.l) / (G.W - G.l - 6) * G.n)));
+        this._esel = { tab: G.tab, i }; this._drawEnergy(); return;
+      }
       const et = e.target.closest('[data-etab]');
       if (et) { this._etab = +et.dataset.etab; this._drawEnergy(); return; }
       const t = e.target.closest('[data-toggle]');
@@ -1672,6 +1679,7 @@ class ZuhauseCard extends HTMLElement {
     this.shadowRoot.querySelectorAll('[data-etab]').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.etab === tab)));
     const leg = a => a.map(([c, n, dash]) => `<span style="--c:${c}"${dash ? ' class="dsh"' : ''}>${n}</span>`).join('');
     if (tab === 3) {
+      k.htip.innerHTML = '';
       this._drawHist(D.days, D.week);
       k.hleg.innerHTML = leg(D.week.map(w => [w[1], w[2]]));
       const tot = i => D.week[i][0].reduce((a, b) => a + b, 0);
@@ -1689,7 +1697,7 @@ class ZuhauseCard extends HTMLElement {
       if (f !== null && i % 4 === 0) eFc += f;
       pts.push({ t, p, f });
     }
-    const W = Math.max(320, Math.round(k.hist.clientWidth || 600)), H = 190, l = 30, b = 22, tp = 10;
+    const W = Math.max(320, Math.round(k.hist.clientWidth || 600)), H = 198, l = 30, b = 22, tp = 18;
     const peak = Math.max(1, ...pts.map(x => Math.max(x.p ? Math.max(x.p.pv, x.p.use) : 0, x.f || 0)));
     const step = peak > 8 ? 2 : peak > 4 ? 1 : peak > 2 ? 0.5 : 0.25, max = Math.ceil(peak / step) * step;
     const X = i => l + (W - l - 6) * i / 96, Y = v => tp + (H - tp - b) * (1 - v / max);
@@ -1705,6 +1713,16 @@ class ZuhauseCard extends HTMLElement {
     g += area('pv', 'var(--sun)', 0.35) + area('use', 'var(--house)', 0.12);
     const fpts = pts.map((x, i) => x.f !== null && i % 4 === 2 ? [X(i), Y(x.f)] : null).filter(Boolean);
     if (fpts.length) g += `<polyline fill="none" stroke="var(--batt)" stroke-width="2" stroke-dasharray="4 4" points="${fpts.map(p => p.join(',')).join(' ')}"/>`;
+    g += `<text x="${l - 5}" y="9" text-anchor="end">kW</text>`;
+    // angetippter Zeitpunkt: Linie und Werte darunter
+    this._eGeo = { W, l, n: 96, tab };
+    const si = this._esel && this._esel.tab === tab ? this._esel.i : null;
+    if (si !== null) {
+      const x = pts[si], hm = new Date(x.t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      g += `<line x1="${X(si)}" x2="${X(si)}" y1="${tp}" y2="${Y(0)}" stroke="var(--fg)" stroke-width="1" stroke-dasharray="2 2"/>`;
+      const fv = x.f !== null ? x.f : null;
+      k.htip.innerHTML = `<b>${hm} Uhr</b>` + (x.p ? ` · Erzeugung ${de(x.p.pv, 2)} kW · Verbrauch ${de(x.p.use, 2)} kW` : '') + (fv !== null ? ` · Prognose ${de(fv, 2)} kW` : '') + (!x.p && fv === null ? ' · keine Daten' : '');
+    } else k.htip.innerHTML = '<span style="color:var(--muted)">Antippen zeigt die Werte zu einer Uhrzeit</span>';
     if (tab === 1) { const n = (Date.now() - +day) / 900000; g += `<line x1="${X(n)}" x2="${X(n)}" y1="${tp}" y2="${Y(0)}" stroke="var(--grid)" stroke-width="1.5"/>`; }
     k.hist.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Erzeugung und Verbrauch">${g}</svg>`;
     k.hleg.innerHTML = leg([...(tab < 2 ? [['var(--sun)', 'Erzeugung'], ['var(--house)', 'Verbrauch']] : []), ['var(--batt)', 'Erwartete Erzeugung', 1]]);
