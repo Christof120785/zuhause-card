@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.17.2';
+const VERSION = '2.18.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -38,12 +38,16 @@ if (!window.__zuhauseUpd) {
 
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
-  energy: ['Energie & Wallbox', 8, 1], sec: ['Sicherheit', 4, 1], home: ['Räume', 8, 2],
-  cams: ['Kameras', 4, 1], wx: ['Wetter', 8, 1], waste: ['Müllabfuhr', 4, 1], hist: ['Energiebilanz', 12, 2]
+  energy: ['Energie & Wallbox', 8, 1], cams: ['Kameras', 4, 1], home: ['Räume', 8, 2], waste: ['Müllabfuhr', 4, 1],
+  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1]
 };
 
+// Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
+const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /^wohnzimmer( gro(ß|ss))?$/i], ['Küche', /k(ü|ue|u)che/i],
+  ['Flur', /flur/i], ['Esszimmer', /esszimmer/i], ['Carport', /carportlicht( 1)?$/i]];
+
 // Haus-Bild für die Energie-Kachel (liegt im Repo)
-const HAUS = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/haus-energie.webp';
+const HAUS = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/haus-energie2.webp';
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -174,20 +178,30 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 @media(max-width:520px){.hr{width:100%;justify-content:space-between}.hero .alarm{flex:1;min-width:0}}
 /* energy */
 .stage{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#9faabb,#adb2be);padding:74px 0 86px;margin-bottom:2px}
-.hbox{position:relative;max-width:620px;margin:0 auto}.hbox img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+.hbox{position:relative;max-width:620px;margin:0 auto}.hbox img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);mask-composite:intersect}
 .lab{position:absolute;color:#fff;text-shadow:0 1px 3px rgba(30,40,60,.35);white-space:nowrap}
 .lab.up{bottom:calc(100% + 6px)}.lab.dn{top:calc(100% + 6px)}.lab[data-more]{cursor:pointer}
 .lab .t{font-size:13px;opacity:.92}.lab .v{font-family:var(--display);font-size:22px;font-weight:700;line-height:1.15}
 .lab .v small{font-size:13px;font-weight:600;margin-left:3px}.lab .s{font-size:12.5px;opacity:.95}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;transition:opacity .3s}
 .dot.idle{opacity:.35}
-/* laufende Punkte: Richtung = wohin der Strom fließt (Pfad zeigt ins Haus, .rev = raus) */
-.flow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.flow path{fill:none;stroke-width:6;stroke-linecap:round;stroke-dasharray:0 14;vector-effect:non-scaling-stroke;animation:fl2 .8s linear infinite;filter:drop-shadow(0 0 2px #fff);transition:opacity .3s}
-.flow path.rev{animation-direction:reverse}.flow path.idle{opacity:0}
-@keyframes fl2{to{stroke-dashoffset:-28}}
-@media(prefers-reduced-motion:reduce){.flow path{animation:none}}
+/* Pfeile (Chevrons), die nacheinander aufleuchten: Richtung = wohin der Strom fließt */
+.flow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.flow g{transition:opacity .3s}.flow g.idle{opacity:0}
+.flow g path{opacity:.18;animation:chv 1.2s linear infinite;filter:drop-shadow(0 0 3px rgba(255,255,255,.55))}
+@keyframes chv{0%{opacity:.18}25%{opacity:1}55%,100%{opacity:.18}}
+@media(prefers-reduced-motion:reduce){.flow g path{animation:none;opacity:.8}}
 @media(max-width:520px){.lab .v{font-size:18px}.lab .v small{font-size:12px}}
+.fav{position:relative;height:146px;margin:12px 0 0;border-radius:18px;background:linear-gradient(160deg,#2b3b4f,var(--hero));box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);perspective:720px;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab}
+.fav::before{content:"";position:absolute;left:50%;bottom:8px;width:62%;height:26px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(closest-side,rgba(255,255,255,.07),transparent)}
+.fi{position:absolute;left:50%;top:16px;width:140px;margin-left:-70px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11.5px;color:var(--hero-mut);text-align:center;will-change:transform,opacity}
+.fav:not(.drag) .fi{transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s}
+.fi i{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.1);color:#d6dee6;display:grid;place-items:center;margin:4px 0 7px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 8px 16px rgba(0,0,0,.25);transition:background .25s,color .25s,box-shadow .25s}
+.fi i svg{width:24px;height:24px}
+.fi b{font-weight:700;font-size:13px;color:var(--hero-fg);line-height:1.2;white-space:nowrap;opacity:var(--lo,1)}
+.fi span{font-size:11.5px;opacity:var(--lo,1)}
+.fi.on i{background:var(--sun);color:#fff;box-shadow:0 0 0 6px rgba(239,181,68,.22),0 0 26px rgba(239,181,68,.45)}
+.fi.na{filter:grayscale(1)}
 .carrow{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13.5px;color:var(--muted);cursor:pointer}.carrow b{color:var(--fg)}
 .cbar{flex:1;height:7px;border-radius:9px;background:var(--tile);overflow:hidden;min-width:40px}.cbar i{display:block;height:100%;width:0;background:var(--grid);border-radius:9px}
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
@@ -408,12 +422,27 @@ class ZuhauseCard extends HTMLElement {
     return Object.values(this._hass.states).find(x => x.entity_id.startsWith('sensor.') && /solarbank|anker solix/i.test(x.attributes.friendly_name || '')
       && re.test(x.attributes.friendly_name || '') && !(ex && ex.test(x.attributes.friendly_name || '')));
   }
+  // Marstek B2500 (App "hm2mqtt" über MQTT) selbst finden: je Gerät Ladestand, Solar-Eingang (die Module) und Ausgang
+  _marstek() {
+    const g = {}, key = { 'battery percentage': 'soc', 'total input power': 'in', 'total output power': 'out', 'input 1 power': 'i1', 'input 2 power': 'i2' };
+    Object.values(this._hass.states).forEach(x => {
+      const n = (x.attributes.friendly_name || '').trim();
+      if (!x.entity_id.startsWith('sensor.') || !(/hame|b2500|marstek/i.test(n) || (this._hass.entities && (this._hass.entities[x.entity_id] || {}).platform === 'mqtt'))) return;
+      const m = n.match(/^(.*?)\s*(battery percentage|total input power|total output power|input [12] power)$/i);
+      if (m) (g[m[1]] = g[m[1]] || {})[key[m[2].toLowerCase()]] = x.entity_id;
+    });
+    return Object.values(g).filter(d => d.soc || d.in);
+  }
+  _isM(b) { return !b.soc && !b.power && /marstek|b2500/i.test(b.name || ''); }
+  _mIn() { return this._marstek().reduce((a, d) => a + (this._kw(d.in) || 0), 0); }
   _batSoc(b) {
+    if (this._isM(b)) { const v = this._marstek().map(d => this._n(d.soc)).filter(x => x !== null); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null; }
     if (b.soc || !/anker|solix/i.test(b.name || '')) return this._n(b.soc);
     const x = Object.values(this._hass.states).find(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'battery' && /solarbank|anker solix/i.test(x.attributes.friendly_name || ''));
     return x ? this._n(x.entity_id) : null;
   }
   _batP(b) {
+    if (this._isM(b)) { const d = this._marstek().filter(d => d.in || d.out); return d.length ? d.reduce((a, x) => a + (this._kw(x.in) || 0) - (this._kw(x.out) || 0), 0) : null; }
     if (b.power || !/anker|solix/i.test(b.name || '')) return this._kw(b.power);
     const ch = this._ankerEnt(/ladeleistung|charging power|charge power/i, /entlade|discharg/i), dis = this._ankerEnt(/entladeleistung|discharg\w* power/i);
     if (!ch && !dis) return null;
@@ -442,11 +471,16 @@ class ZuhauseCard extends HTMLElement {
       <div class="meta"><b>${m.name}</b><span data-k="cs${i}">${m.brand}</span></div></div>`).join('');
     const contacts = c.contacts.map((k, i) => `<div class="row" data-k="crow${i}"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span><button class="mini" data-chide="${k.entity}" data-k="chb${i}" hidden></button></div>`).join('');
 
+    // Pfeilkette von a nach b (senkrecht), die Pfeile leuchten nacheinander in Flussrichtung auf
+    const chev = (k, x, a, b, col) => {
+      const L = Math.abs(b - a), n = Math.max(2, Math.min(4, Math.round(L / 44))), sc = Math.min(1.5, L / n / 24);
+      return `<g data-k="${k}" class="idle" fill="${col}">` + Array.from({ length: n }, (_, i) => `<path d="M-16 -13L0 1L16 -13L16 -3L0 11L-16 -3Z" transform="translate(${x} ${a + (i + 0.5) * (b - a) / n}) rotate(${b > a ? 0 : 180}) scale(${sc.toFixed(2)})" style="animation-delay:${(i * 0.22).toFixed(2)}s"/>`).join('') + '</g>';
+    };
     root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="grid">
       <section class="card hero"><span class="ver">v${VERSION}${window.__zuhauseSrc === 'lokal' ? ' · lokal' : ''}</span>
         <div><h1><span data-k="greet">Hallo</span>,<br><em><span data-k="uname">${c.name}</span>.</em></h1>
           <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
-          <div class="chips"><span class="chip" data-k="chOpen"></span><span class="chip" data-k="chLights"></span></div></div>
+          <div class="chips"><span class="chip" data-k="chOpen"></span></div></div>
         <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
           <div data-k="alarm"></div></div>
       </section>
@@ -456,16 +490,18 @@ class ZuhauseCard extends HTMLElement {
         <h2 data-k="eh">Dein Energiefluss</h2><p class="sub"><span data-k="esub"></span> · Autarkie heute <b class="num" data-k="aut">–</b></p>
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
-          <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
-            <path data-k="fpv" class="idle" d="M255.5 0V153" stroke="var(--sun)"/>
-            <path data-k="fbat" class="idle" d="M564 777V722" stroke="var(--batt)"/>
-            <path data-k="fgrid" class="idle" d="M795 777V647" stroke="var(--grid)"/>
+          <svg class="flow" viewBox="0 0 1200 777" aria-hidden="true">
+            ${chev('fpv', 256, 6, 136, 'var(--sun)')}${chev('fbk', 44, 420, 772, 'var(--sun)')}
+            ${chev('fbatI', 562, 800, 742, 'var(--batt)')}${chev('fbatO', 562, 742, 800, 'var(--batt)')}
+            ${chev('fgridI', 793, 806, 712, 'var(--grid)')}${chev('fgridO', 793, 712, 806, 'var(--grid)')}
           </svg>
           <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
           <div class="lab up" style="left:64%"><div class="t"><span class="dot" style="background:#fff"></span>Haus</div><div class="v num"><span data-k="vhouse">–</span><small data-k="uhouse">kW</small></div><div class="s" data-k="shouse"></div></div>
-          <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span><small data-k="pbat"></small></div><div class="s" data-k="sbat"></div></div>
+          <div class="lab dn" style="left:3%"><div class="t"><span class="dot" data-k="dbk" style="background:var(--sun)"></span>Marstek</div><div class="v num"><span data-k="vbk">–</span><small data-k="ubk">W</small></div><div class="s" data-k="sbk"></div><div class="s" data-k="sbk2"></div></div>
+          <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span></div><div class="s" data-k="sbat"></div></div>
           <div class="lab dn" style="left:66%" data-more="${c.grid_in}"><div class="t"><span class="dot" data-k="dgrid" style="background:var(--grid)"></span>Netz</div><div class="v num"><span data-k="vgrid">–</span><small data-k="ugrid">kW</small></div><div class="s" data-k="sgrid"></div></div>
         </div></div>
+        <div class="fav" data-k="fav"></div>
         <div class="carrow" data-more="${c.wallbox}"><span>Auto <b class="num" data-k="csoc">–</b></span><div class="cbar"><i data-k="cbar"></i></div><span class="num">⚡ <span data-k="wbp">–</span> kW · <b data-k="wbtoday">–</b> <b>kWh</b></span></div>
         <div data-k="wbmode"></div>
       </section>
@@ -632,6 +668,13 @@ class ZuhauseCard extends HTMLElement {
     if (!this._lay.hcInit) {
       this._lay.hcInit = true;
       this._lay.hc = (this._lay.hc || []).concat((this._cfg.contacts || []).filter(x => /fenster bad unten/i.test(x.name)).map(x => x.entity));
+      this._save();
+    }
+    // ab v2.18.0 steht "Sicherheit" ganz unten, auch in schon gespeicherten Anordnungen
+    if (!this._lay.secEnd) {
+      this._lay.secEnd = true;
+      const o = this._lay.tiles && this._lay.tiles.order;
+      if (o && o.includes('sec')) { o.splice(o.indexOf('sec'), 1); o.push('sec'); }
       this._save();
     }
     this._roomSig = null;
@@ -859,6 +902,80 @@ class ZuhauseCard extends HTMLElement {
     ids.forEach(id => { this._lay.boost[id] = Date.now(); });
     this._save();
     this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'boost' });
+  }
+
+  // ---------- Lampen-Karussell ----------
+  _favs() {
+    const nm = x => (x.attributes.friendly_name || '').trim();
+    const st = Object.values(this._hass.states).filter(x => /^(light|switch)\./.test(x.entity_id) && !/jalou|gesperrt|sperr|dauer|thermostat|klima|pumpe|sirene/i.test(nm(x)));
+    if (this._cfg.favorites) return this._cfg.favorites.map(f => ({ name: f.name, s: this._s(f.entity) }));
+    return FAV.map(([name, re]) => {
+      const m = st.filter(x => re.test(nm(x))).sort((a, b) => (a.state === 'unavailable') - (b.state === 'unavailable')
+        || (b.attributes.is_hue_group ? 1 : 0) - (a.attributes.is_hue_group ? 1 : 0) || nm(a).length - nm(b).length);
+      return { name, s: m[0] };
+    });
+  }
+  _renderFav() {
+    const el = this._k.fav; if (!el) return;
+    const f = this._favs(), ids = f.map(x => x.s ? x.s.entity_id : '').join();
+    if (ids !== this._favSig) {
+      this._favSig = ids;
+      // bei wenigen Lampen zweimal auf den Ring, damit er voll aussieht
+      const one = f.map((x, i) => `<div class="fi" data-fi="${i}"><i>${svg('bulb')}</i><b>${x.name}</b><span></span></div>`).join('');
+      el.innerHTML = f.length < 8 ? one + one : one;
+      if (this._favPos == null) this._favPos = 0;
+      if (!this._favOn) { this._favOn = true; this._favDrag(el); }
+    }
+    if (!el.classList.contains('drag')) this._favLay();
+    el.querySelectorAll('.fi').forEach(b => {
+      const s = f[+b.dataset.fi % f.length].s, on = !!s && s.state === 'on', na = !s || s.state === 'unavailable';
+      b.classList.toggle('on', on); b.classList.toggle('na', na);
+      b.querySelector('span').textContent = !s ? 'nicht gefunden' : na ? 'nicht erreichbar' : on ? 'an' : 'aus';
+    });
+  }
+  // Lampen stehen auf einem Ring; vorne groß, nach hinten kleiner und blasser
+  _favLay() {
+    const el = this._k.fav, it = [...el.children], n = it.length; if (!n) return;
+    const R = this._favR(), st = 2 * Math.PI / n;
+    it.forEach((b, i) => {
+      let a = (i - this._favPos) * st; a = Math.atan2(Math.sin(a), Math.cos(a));
+      const z = Math.cos(a);
+      b.style.transform = `translateX(${Math.sin(a) * R}px) translateY(${(z - 1) * 10}px) translateZ(${(z - 1) * R * 0.8 + 24}px) rotateY(${a * 180 / Math.PI * 0.45}deg) scale(${(0.72 + 0.5 * Math.pow(z, 6)).toFixed(3)})`;
+      b.style.opacity = z < 0.2 ? 0 : 0.25 + 0.75 * z * z;
+      b.style.setProperty('--lo', Math.max(0, 1 - Math.abs(a) / (st * 0.6)).toFixed(2)); // Name nur bei der vorderen Lampe
+      b.style.zIndex = Math.round(z * 100) + 100;
+      b.style.pointerEvents = z < 0 ? 'none' : '';
+    });
+  }
+  _favR() { return Math.min(300, Math.max(140, this._k.fav.clientWidth * 0.46)); }
+  _favDrag(el) {
+    let x0 = null, p0 = 0, moved = false, lx = 0, lt = 0, v = 0;
+    const per = () => this._favR() * Math.sin(2 * Math.PI / el.children.length);
+    el.addEventListener('pointerdown', e => { x0 = lx = e.clientX; lt = e.timeStamp; p0 = this._favPos; moved = false; v = 0; });
+    el.addEventListener('pointermove', e => {
+      if (x0 === null) return;
+      if (!moved && Math.abs(e.clientX - x0) > 6) { moved = true; el.classList.add('drag'); try { el.setPointerCapture(e.pointerId); } catch (_) {} }
+      if (!moved) return;
+      const dt = Math.max(1, e.timeStamp - lt); v = (e.clientX - lx) / dt; lx = e.clientX; lt = e.timeStamp;
+      this._favPos = p0 - (e.clientX - x0) / per(); this._favLay();
+    });
+    const end = e => {
+      if (x0 === null) return;
+      el.classList.remove('drag');
+      if (moved) {
+        this._favPos = Math.round(this._favPos - Math.max(-2, Math.min(2, v * 0.35)));
+      } else {
+        const b = e.target.closest && e.target.closest('.fi');
+        if (b) {
+          const i = [...el.children].indexOf(b), n = el.children.length, d = ((i - this._favPos) % n + n + n / 2) % n - n / 2;
+          if (Math.abs(d) < 0.5) { const fs = this._favs(), s = fs[i % fs.length].s; if (s && s.state !== 'unavailable') this._hass.callService(s.entity_id.split('.')[0], 'toggle', { entity_id: s.entity_id }); }
+          else this._favPos = Math.round(this._favPos + d);
+        }
+      }
+      x0 = null; this._favLay();
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', e => { x0 = null; el.classList.remove('drag'); this._favPos = Math.round(this._favPos); this._favLay(); });
   }
 
   // ---------- Kacheln: Reihenfolge und Ausblenden pro Benutzer ----------
@@ -1480,13 +1597,24 @@ class ZuhauseCard extends HTMLElement {
     }
 
     // Energie
-    const pv = this._kw(c.pv), gin = this._kw(c.grid_in) || 0, gout = this._kw(c.grid_out) || 0, wb = this._kw(c.wallbox) || 0;
+    const mIn = c.batteries.some(b => this._isM(b)) ? this._mIn() : 0; // Module an den Marstek-Speichern
+    const pv0 = this._kw(c.pv), pv = pv0 === null && !mIn ? null : (pv0 || 0) + mIn, gin = this._kw(c.grid_in) || 0, gout = this._kw(c.grid_out) || 0, wb = this._kw(c.wallbox) || 0;
     const grid = gin - gout;
     const batP = c.batteries.reduce((a, b) => a + (this._batP(b) || 0), 0); // positiv = lädt
     const house = Math.max(0, (pv || 0) + grid - wb - batP);
     // Unter 1 kW in Watt, sonst kW mit einer Stelle
     const pw = (key, v) => { if (v === null) { this._set('v' + key, '–'); return; } const w = Math.abs(v) < 1; this._set('v' + key, w ? Math.round(v * 1000) : de(v, 1)); this._set('u' + key, w ? 'W' : 'kW'); };
-    pw('pv', pv);
+    pw('pv', pv0);
+    // Balkon: Module an den Marstek-Speichern
+    const mb = c.batteries.find(b => this._isM(b)), mSoc = mb ? this._batSoc(mb) : null, mP = mb ? this._batP(mb) : null;
+    pw('bk', mb && (mSoc !== null || mIn) ? mIn : null);
+    this._set('sbk', mSoc === null ? (mb ? 'noch nicht verbunden' : '') : `Akku ${Math.round(mSoc)} %` + (mP > 0.02 ? ' · lädt' : mP < -0.02 ? ' · gibt ab' : ''));
+    // die einzelnen Module (je Marstek zwei Eingänge)
+    const mods = mb ? this._marstek().flatMap(d => [d.i1, d.i2]).filter(Boolean).map(id => this._n(id)).filter(v => v !== null) : [];
+    this._set('sbk2', mods.length ? mods.map(v => Math.round(v)).join(' · ') + ' W' : '');
+    k.dbk.classList.toggle('idle', !(mIn > 0.005));
+    k.fbk.classList.toggle('idle', !(mIn > 0.005));
+    this._renderFav();
     pw('house', house + wb);
     this._set('shouse', wb > 0.05 ? 'inkl. Wallbox' : 'Verbrauch');
     pw('grid', Math.abs(grid));
@@ -1498,14 +1626,16 @@ class ZuhauseCard extends HTMLElement {
     this._set('esub', wb > 0.05 ? (srcTxt || 'Wallbox aktiv')
       : (pv || 0) > 0.05 ? (grid < 0 ? 'Die Sonne liefert mehr, als du brauchst' : 'Die Sonne liefert gerade Energie')
       : 'Gerade kein Sonnenstrom');
-    k.dpv.classList.toggle('idle', !((pv || 0) > 0.05));
     k.dgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
-    k.dbat.classList.toggle('idle', Math.abs(batP) < 0.02);
-    k.fpv.classList.toggle('idle', !((pv || 0) > 0.05));
-    k.fbat.classList.toggle('idle', Math.abs(batP) < 0.02);
-    k.fbat.classList.toggle('rev', batP > 0); // lädt: vom Haus in den Speicher
-    k.fgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
-    k.fgrid.classList.toggle('rev', grid < 0); // Einspeisung: vom Haus ins Netz
+    // Speicher in der Grafik = Hausspeicher (Anker), Marstek steht beim Balkon
+    const aP = c.batteries.filter(b => !this._isM(b)).reduce((a, b) => a + (this._batP(b) || 0), 0);
+    k.fpv.classList.toggle('idle', !((pv0 || 0) > 0.05));
+    k.dpv.classList.toggle('idle', !((pv0 || 0) > 0.05));
+    k.dbat.classList.toggle('idle', Math.abs(aP) < 0.02);
+    k.fbatI.classList.toggle('idle', !(aP < -0.02)); // entlädt: vom Speicher ins Haus
+    k.fbatO.classList.toggle('idle', !(aP > 0.02)); // lädt: vom Haus in den Speicher
+    k.fgridI.classList.toggle('idle', !(grid > 0.02)); // Bezug
+    k.fgridO.classList.toggle('idle', !(grid < -0.02)); // Einspeisung: vom Haus ins Netz
 
     // Batterien
     const socs = [];
@@ -1514,14 +1644,15 @@ class ZuhauseCard extends HTMLElement {
       if (soc === null) {
         if (k['bsoc' + i]) { k['bsoc' + i].className = 'pill off'; this._set('bsoc' + i, 'noch nicht verbunden'); k['bbar' + i].style.width = '0'; this._set('bsub' + i, 'wird angezeigt, sobald das Gerät in Home Assistant ist'); }
       } else {
-        socs.push(soc);
+        if (!this._isM(b)) socs.push(soc);
         if (k['bsoc' + i]) { k['bsoc' + i].className = 'num'; this._set('bsoc' + i, `${Math.round(soc)} %`); k['bbar' + i].style.width = `${Math.max(0, Math.min(100, soc))}%`; }
-        this._set('bsub' + i, p === null ? '' : p > 0.02 ? `lädt ${de(p, 1)} kW` : p < -0.02 ? `entlädt ${de(-p, 1)} kW` : 'Ruhe');
+        this._set('bsub' + i, (p === null ? '' : p > 0.02 ? `lädt ${de(p, 1)} kW` : p < -0.02 ? `entlädt ${de(-p, 1)} kW` : 'Ruhe')
+          + (this._isM(b) && mIn > 0.005 ? ` · Module ${Math.round(mIn * 1000)} W` : ''));
       }
     });
     this._set('vbat', socs.length ? Math.round(socs.reduce((a, b) => a + b, 0) / socs.length) + ' %' : '–');
-    this._set('pbat', Math.abs(batP) >= 0.02 ? `· ${de(Math.abs(batP), 1)} kW` : '');
-    this._set('sbat', !socs.length ? 'noch nicht verbunden' : batP > 0.02 ? '↓ lädt' : batP < -0.02 ? '↑ entlädt' : 'Ruhe');
+    const ap = Math.abs(aP) < 1 ? Math.round(Math.abs(aP) * 1000) + ' W' : de(Math.abs(aP), 1) + ' kW';
+    this._set('sbat', !socs.length ? 'noch nicht verbunden' : aP > 0.02 ? `↓ lädt ${ap}` : aP < -0.02 ? `↑ entlädt ${ap}` : 'Ruhe');
     this._set('bsub', socs.length ? 'Ladestand deiner Speicher' : 'Vorbereitet, Anbindung folgt');
 
     // Wallbox und Auto
@@ -1556,9 +1687,7 @@ class ZuhauseCard extends HTMLElement {
     this._set('secs', open.length ? 'Bitte prüfen, ob das so gewollt ist.' : lost.length ? (lost.length > 1 ? 'Kontakte melden sich nicht' : 'Ein Kontakt meldet sich nicht') + ', vielleicht ist die Batterie leer.' : 'Alle Türen und Fenster sind zu.');
 
     // Kopfzeile
-    const lightsOn = Object.keys(this._hass.states).filter(id => id.startsWith('light.') && this._hass.states[id].state === 'on').length;
     this._set('chOpen', open.length === 1 ? '1 Tür/Fenster offen' : `${open.length} Türen/Fenster offen`);
-    this._set('chLights', lightsOn === 1 ? '1 Licht an' : `${lightsOn} Lichter an`);
 
     // Räume und Alarmanlage
     this._renderRooms();
