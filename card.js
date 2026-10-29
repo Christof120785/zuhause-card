@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.18.1';
+const VERSION = '2.19.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -168,16 +168,21 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .lab .v small{font-size:13px;font-weight:600;margin-left:3px}.lab .s{font-size:12.5px;opacity:.95}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;transition:opacity .3s}
 .dot.idle{opacity:.35}
-/* Pfeile (Chevrons), die nacheinander aufleuchten: Richtung = wohin der Strom fließt */
-.flow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.flow g{transition:opacity .3s}.flow g.idle{opacity:0}
-.flow g path{opacity:.18;animation:chv 1.2s linear infinite;filter:drop-shadow(0 0 3px rgba(255,255,255,.55))}
-@keyframes chv{0%{opacity:.18}25%{opacity:1}55%,100%{opacity:.18}}
-@media(prefers-reduced-motion:reduce){.flow g path{animation:none;opacity:.8}}
+/* Lichtimpuls (hellblau mit Schweif), der auf den Kabeln im Bild entlangläuft: Richtung = wohin der Strom fließt (.rev = rückwärts) */
+.flow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.flow path{fill:none;stroke-linecap:round;stroke-linejoin:round;transition:opacity .4s}
+.flow .p{stroke-width:7;animation:pulse 1.8s linear infinite;animation-delay:var(--d)}
+.flow .p.t1{stroke:#3d8bff;opacity:.35;stroke-dasharray:22 78}
+.flow .p.t2{stroke:#5aa8ff;opacity:.7;stroke-dasharray:12 88}
+.flow .p.t3{stroke:#d9efff;stroke-dasharray:5 95;filter:drop-shadow(0 0 4px #6db7ff)}
+.flow .p.rev{animation-direction:reverse;animation-delay:0s}
+.flow g{transition:opacity .4s}.flow g.idle{opacity:0}
+@keyframes pulse{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+@media(prefers-reduced-motion:reduce){.flow .p{animation:none}}
 @media(max-width:520px){.lab .v{font-size:18px}.lab .v small{font-size:12px}}
-.fav{position:relative;height:146px;margin:12px 0 0;border-radius:18px;background:linear-gradient(160deg,#2b3b4f,var(--hero));box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);perspective:720px;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab}
+.fav{position:relative;height:158px;margin:12px 0 0;border-radius:18px;background:linear-gradient(160deg,#2b3b4f,var(--hero));box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);perspective:720px;overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab}
 .fav::before{content:"";position:absolute;left:50%;bottom:8px;width:62%;height:26px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(closest-side,rgba(255,255,255,.07),transparent)}
-.fi{position:absolute;left:50%;top:16px;width:140px;margin-left:-70px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11.5px;color:var(--hero-mut);text-align:center;will-change:transform,opacity}
+.fi{position:absolute;left:50%;top:26px;width:140px;margin-left:-70px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11.5px;color:var(--hero-mut);text-align:center;will-change:transform,opacity}
 .fav:not(.drag) .fi{transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s}
 .fi i{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.1);color:#d6dee6;display:grid;place-items:center;margin:4px 0 7px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 8px 16px rgba(0,0,0,.25);transition:background .25s,color .25s,box-shadow .25s}
 .fi i svg{width:24px;height:24px}
@@ -185,6 +190,16 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .fi span{font-size:11.5px;opacity:var(--lo,1)}
 .fi.on i{background:var(--sun);color:#fff;box-shadow:0 0 0 6px rgba(239,181,68,.22),0 0 26px rgba(239,181,68,.45)}
 .fi.na{filter:grayscale(1)}
+.favp{margin-top:8px;border-radius:18px;background:linear-gradient(160deg,#2b3b4f,var(--hero));color:var(--hero-fg);padding:12px 14px 14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.favp .hd{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px}
+.favp .hd span{font-weight:500;color:var(--hero-mut);font-size:12.5px}
+.favp .x{all:unset;cursor:pointer;margin-left:auto;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.1);display:grid;place-items:center;font-size:16px}
+.favp .tgl{all:unset;cursor:pointer;padding:6px 12px;border-radius:99px;background:rgba(255,255,255,.12);font-size:12px;font-weight:700}
+.favp .tgl.on{background:var(--sun);color:#fff}
+.favp .dim{height:30px;margin:10px 0 2px}
+.favp .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--hero-mut);margin:10px 0 6px}
+.favp .scb{background:rgba(255,255,255,.12);color:var(--hero-fg)}
+.favp .cmore{background:rgba(255,255,255,.12);color:var(--hero-fg)}
 .carrow{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13.5px;color:var(--muted);cursor:pointer}.carrow b{color:var(--fg)}
 .cbar{flex:1;height:7px;border-radius:9px;background:var(--tile);overflow:hidden;min-width:40px}.cbar i{display:block;height:100%;width:0;background:var(--grid);border-radius:9px}
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
@@ -431,6 +446,11 @@ class ZuhauseCard extends HTMLElement {
     if (!ch && !dis) return null;
     return (ch ? this._kw(ch.entity_id) || 0 : 0) - (dis ? this._kw(dis.entity_id) || 0 : 0);
   }
+  _flow(key, on, rev) {
+    const k = this._k; if (!k[key]) return;
+    k[key].classList.toggle('idle', !on);
+    k[key].querySelectorAll('path').forEach(p => p.classList.toggle('rev', !!rev));
+  }
   _kw(id) {
     const s = this._s(id); const v = this._n(id); if (v === null) return null;
     const u = (s.attributes.unit_of_measurement || 'W').toLowerCase();
@@ -454,11 +474,6 @@ class ZuhauseCard extends HTMLElement {
       <div class="meta"><b>${m.name}</b><span data-k="cs${i}">${m.brand}</span></div></div>`).join('');
     const contacts = c.contacts.map((k, i) => `<div class="row" data-k="crow${i}"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span><button class="mini" data-chide="${k.entity}" data-k="chb${i}" hidden></button></div>`).join('');
 
-    // Pfeilkette von a nach b (senkrecht), die Pfeile leuchten nacheinander in Flussrichtung auf
-    const chev = (k, x, a, b, col) => {
-      const L = Math.abs(b - a), n = Math.max(2, Math.min(4, Math.round(L / 44))), sc = Math.min(1.5, L / n / 24);
-      return `<g data-k="${k}" class="idle" fill="${col}">` + Array.from({ length: n }, (_, i) => `<path d="M-16 -13L0 1L16 -13L16 -3L0 11L-16 -3Z" transform="translate(${x} ${a + (i + 0.5) * (b - a) / n}) rotate(${b > a ? 0 : 180}) scale(${sc.toFixed(2)})" style="animation-delay:${(i * 0.22).toFixed(2)}s"/>`).join('') + '</g>';
-    };
     root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="grid">
       <section class="card hero"><span class="ver">v${VERSION}${window.__zuhauseSrc === 'lokal' ? ' · lokal' : ''}</span>
         <div><h1><span data-k="greet">Hallo</span>,<br><em><span data-k="uname">${c.name}</span>.</em></h1>
@@ -473,10 +488,11 @@ class ZuhauseCard extends HTMLElement {
         <h2 data-k="eh">Dein Energiefluss</h2><p class="sub"><span data-k="esub"></span> · Autarkie heute <b class="num" data-k="aut">–</b></p>
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
-          <svg class="flow" viewBox="0 0 1200 777" aria-hidden="true">
-            ${chev('fpv', 256, 6, 136, 'var(--sun)')}${chev('fbk', 44, 420, 772, 'var(--sun)')}
-            ${chev('fbatI', 562, 800, 742, 'var(--batt)')}${chev('fbatO', 562, 742, 800, 'var(--batt)')}
-            ${chev('fgridI', 793, 806, 712, 'var(--grid)')}${chev('fgridO', 793, 712, 806, 'var(--grid)')}
+          <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
+            ${[['fpv', 'M846 140L909 226L915 240L916 534L803 551', 'var(--sun)'], ['fbk', 'M215 421L255 437L401 428L404 433L404 512L396 521L396 618', 'var(--sun)'],
+              ['fbat', 'M627 708L667 704L669 584L684 566L747 562', 'var(--batt)'], ['fgrid', 'M948 777L768 690L766 600', 'var(--grid)'],
+              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff']].map(([k, d, col]) =>
+              `<g data-k="${k}" class="idle">${[['t1', -1.494], ['t2', -1.674], ['t3', 0]].map(([c, dl]) => `<path class="p ${c}" d="${d}" pathLength="100" style="--d:${dl}s"/>`).join('')}</g>`).join('')}
           </svg>
           <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
           <div class="lab up" style="left:64%"><div class="t"><span class="dot" style="background:#fff"></span>Haus</div><div class="v num"><span data-k="vhouse">–</span><small data-k="uhouse">kW</small></div><div class="s" data-k="shouse"></div></div>
@@ -484,7 +500,7 @@ class ZuhauseCard extends HTMLElement {
           <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span></div><div class="s" data-k="sbat"></div></div>
           <div class="lab dn" style="left:66%" data-more="${c.grid_in}"><div class="t"><span class="dot" data-k="dgrid" style="background:var(--grid)"></span>Netz</div><div class="v num"><span data-k="vgrid">–</span><small data-k="ugrid">kW</small></div><div class="s" data-k="sgrid"></div></div>
         </div></div>
-        <div class="fav" data-k="fav"></div>
+        <div class="fav" data-k="fav"></div><div class="favp" data-k="favp" hidden></div>
         <div class="carrow" data-more="${c.wallbox}"><span>Auto <b class="num" data-k="csoc">–</b></span><div class="cbar"><i data-k="cbar"></i></div><span class="num">⚡ <span data-k="wbp">–</span> kW · <b data-k="wbtoday">–</b> <b>kWh</b></span></div>
         <div data-k="wbmode"></div>
       </section>
@@ -577,6 +593,9 @@ class ZuhauseCard extends HTMLElement {
       if (this._roomClick(e)) return;
       const ch = e.target.closest('[data-chide]');
       if (ch && this._lay) { const id = ch.dataset.chide, l = this._lay.hc = this._lay.hc || []; const i = l.indexOf(id); if (i < 0) l.push(id); else l.splice(i, 1); this._save(); this._update(); return; }
+      if (e.target.closest('[data-favx]')) { this._favOpen = null; this._renderFavP(); return; }
+      const ft = e.target.closest('[data-favtg]');
+      if (ft) { const id = ft.dataset.favtg; this._hass.callService(id.split('.')[0], 'toggle', { entity_id: id }); return; }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return; }
       const nt = e.target.closest('[data-notiftg]');
@@ -910,11 +929,32 @@ class ZuhauseCard extends HTMLElement {
       if (!this._favOn) { this._favOn = true; this._favDrag(el); }
     }
     if (!el.classList.contains('drag')) this._favLay();
+    this._renderFavP();
     el.querySelectorAll('.fi').forEach(b => {
       const s = f[+b.dataset.fi % f.length].s, on = !!s && s.state === 'on', na = !s || s.state === 'unavailable';
       b.classList.toggle('on', on); b.classList.toggle('na', na);
       b.querySelector('span').textContent = !s ? 'nicht gefunden' : na ? 'nicht erreichbar' : on ? 'an' : 'aus';
     });
+  }
+  // Bedienfeld nach langem Drücken: an/aus, dimmen, Farben, Szenen (Hue-Szenen der Gruppe)
+  _renderFavP() {
+    const P = this._k.favp; if (!P) return;
+    const s = this._favOpen && this._s(this._favOpen);
+    if (!s) { P.hidden = true; this._favPSig = null; return; }
+    P.hidden = false;
+    const on = s.state === 'on', pct = this._pct(s), name = this._favOpenName || s.attributes.friendly_name;
+    const sig = s.entity_id + on + (s.attributes.color_mode || '') + JSON.stringify(s.attributes.hs_color || '');
+    if (sig === this._favPSig) { const sp = P.querySelector('[data-k2="pct"]'); if (sp) sp.textContent = on ? `${pct ?? 100} %` : ''; return; }
+    this._favPSig = sig;
+    const fn = (s.attributes.friendly_name || '').trim().toLowerCase();
+    const sc = Object.values(this._hass.states).filter(x => x.entity_id.startsWith('scene.') && (x.attributes.group_name || '').trim().toLowerCase() === fn)
+      .sort((a, b) => (a.attributes.name || '').localeCompare(b.attributes.name || ''));
+    const dimm = s.entity_id.startsWith('light.') && (s.attributes.supported_color_modes || []).some(m => m !== 'onoff');
+    P.innerHTML = `<div class="hd">${name} <span data-k2="pct">${on ? `${pct ?? 100} %` : ''}</span>`
+      + `<button class="tgl${on ? ' on' : ''}" data-favtg="${s.entity_id}">${on ? 'An' : 'Aus'}</button><button class="x" data-favx aria-label="Schließen">×</button></div>`
+      + (dimm ? `<input type="range" class="dim" min="1" max="100" value="${on ? pct || 100 : 50}" data-dim="${s.entity_id}" aria-label="${name} dimmen">` : '')
+      + (on ? this._colors(s, name) : '')
+      + (sc.length ? `<div class="lbl">Szenen</div><div class="scw">${sc.map(x => `<button class="scb" type="button" data-scene="${x.entity_id}">${x.attributes.name || x.attributes.friendly_name}</button>`).join('')}</div>` : '');
   }
   // Lampen stehen auf einem Ring; vorne groß, nach hinten kleiner und blasser
   _favLay() {
@@ -934,17 +974,34 @@ class ZuhauseCard extends HTMLElement {
   _favDrag(el) {
     let x0 = null, p0 = 0, moved = false, lx = 0, lt = 0, v = 0;
     const per = () => this._favR() * Math.sin(2 * Math.PI / el.children.length);
-    el.addEventListener('pointerdown', e => { x0 = lx = e.clientX; lt = e.timeStamp; p0 = this._favPos; moved = false; v = 0; });
+    let lp = null, long = false;
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    el.addEventListener('pointerdown', e => {
+      x0 = lx = e.clientX; lt = e.timeStamp; p0 = this._favPos; moved = false; v = 0; long = false;
+      const b = e.target.closest && e.target.closest('.fi');
+      clearTimeout(lp);
+      if (b) lp = setTimeout(() => {
+        if (moved || x0 === null) return;
+        const fs = this._favs(), x = fs[+b.dataset.fi % fs.length];
+        if (!x.s) return;
+        long = true; this._favOpen = x.s.entity_id; this._favOpenName = x.name; this._favPSig = null;
+        const i = [...el.children].indexOf(b), n = el.children.length; this._favPos = Math.round(this._favPos + (((i - this._favPos) % n + n + n / 2) % n - n / 2));
+        this._favLay(); this._renderFavP();
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, 500);
+    });
     el.addEventListener('pointermove', e => {
       if (x0 === null) return;
-      if (!moved && Math.abs(e.clientX - x0) > 6) { moved = true; el.classList.add('drag'); try { el.setPointerCapture(e.pointerId); } catch (_) {} }
+      if (!moved && Math.abs(e.clientX - x0) > 6) { moved = true; clearTimeout(lp); el.classList.add('drag'); try { el.setPointerCapture(e.pointerId); } catch (_) {} }
       if (!moved) return;
       const dt = Math.max(1, e.timeStamp - lt); v = (e.clientX - lx) / dt; lx = e.clientX; lt = e.timeStamp;
       this._favPos = p0 - (e.clientX - x0) / per(); this._favLay();
     });
     const end = e => {
+      clearTimeout(lp);
       if (x0 === null) return;
       el.classList.remove('drag');
+      if (long) { x0 = null; return; }
       if (moved) {
         this._favPos = Math.round(this._favPos - Math.max(-2, Math.min(2, v * 0.35)));
       } else {
@@ -1598,7 +1655,7 @@ class ZuhauseCard extends HTMLElement {
     const mods = mb ? this._marstek().flatMap(d => [d.i1, d.i2]).filter(Boolean).map(id => this._n(id)).filter(v => v !== null) : [];
     this._set('sbk2', mods.length ? mods.map(v => Math.round(v)).join(' · ') + ' W' : '');
     k.dbk.classList.toggle('idle', !(mIn > 0.005));
-    k.fbk.classList.toggle('idle', !(mIn > 0.005));
+    this._flow('fbk', mIn > 0.005);
     this._renderFav();
     pw('house', house + wb);
     this._set('shouse', wb > 0.05 ? 'inkl. Wallbox' : 'Verbrauch');
@@ -1614,13 +1671,13 @@ class ZuhauseCard extends HTMLElement {
     k.dgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
     // Speicher in der Grafik = Hausspeicher (Anker), Marstek steht beim Balkon
     const aP = c.batteries.filter(b => !this._isM(b)).reduce((a, b) => a + (this._batP(b) || 0), 0);
-    k.fpv.classList.toggle('idle', !((pv0 || 0) > 0.05));
+    this._flow('fpv', (pv0 || 0) > 0.05);
+    this._flow('fwb', wb > 0.05);
+    this._flow('fhouse', house > 0.05);
     k.dpv.classList.toggle('idle', !((pv0 || 0) > 0.05));
     k.dbat.classList.toggle('idle', Math.abs(aP) < 0.02);
-    k.fbatI.classList.toggle('idle', !(aP < -0.02)); // entlädt: vom Speicher ins Haus
-    k.fbatO.classList.toggle('idle', !(aP > 0.02)); // lädt: vom Haus in den Speicher
-    k.fgridI.classList.toggle('idle', !(grid > 0.02)); // Bezug
-    k.fgridO.classList.toggle('idle', !(grid < -0.02)); // Einspeisung: vom Haus ins Netz
+    this._flow('fbat', Math.abs(aP) > 0.02, aP > 0); // lädt: vom Haus in den Speicher
+    this._flow('fgrid', Math.abs(grid) > 0.02, grid < 0); // Einspeisung: vom Haus ins Netz
 
     // Batterien
     const socs = [];
