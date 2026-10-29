@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.17.0';
+const VERSION = '2.17.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -386,6 +386,22 @@ class ZuhauseCard extends HTMLElement {
   _s(id) { return id && this._hass.states[id]; }
   _n(id) { const s = this._s(id); if (!s) return null; const v = parseFloat(s.state); return isNaN(v) ? null : v; }
   // Leistung immer in kW, egal ob der Sensor W oder kW liefert
+  // Speicher ohne eingetragene Sensoren: Anker Solarbank (Integration "Anker SOLIX Official") selbst finden
+  _ankerEnt(re, ex) {
+    return Object.values(this._hass.states).find(x => x.entity_id.startsWith('sensor.') && /solarbank|anker solix/i.test(x.attributes.friendly_name || '')
+      && re.test(x.attributes.friendly_name || '') && !(ex && ex.test(x.attributes.friendly_name || '')));
+  }
+  _batSoc(b) {
+    if (b.soc || !/anker|solix/i.test(b.name || '')) return this._n(b.soc);
+    const x = Object.values(this._hass.states).find(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'battery' && /solarbank|anker solix/i.test(x.attributes.friendly_name || ''));
+    return x ? this._n(x.entity_id) : null;
+  }
+  _batP(b) {
+    if (b.power || !/anker|solix/i.test(b.name || '')) return this._kw(b.power);
+    const ch = this._ankerEnt(/ladeleistung|charging power|charge power/i, /entlade|discharg/i), dis = this._ankerEnt(/entladeleistung|discharg\w* power/i);
+    if (!ch && !dis) return null;
+    return (ch ? this._kw(ch.entity_id) || 0 : 0) - (dis ? this._kw(dis.entity_id) || 0 : 0);
+  }
   _kw(id) {
     const s = this._s(id); const v = this._n(id); if (v === null) return null;
     const u = (s.attributes.unit_of_measurement || 'W').toLowerCase();
@@ -1436,7 +1452,7 @@ class ZuhauseCard extends HTMLElement {
     // Energie
     const pv = this._kw(c.pv), gin = this._kw(c.grid_in) || 0, gout = this._kw(c.grid_out) || 0, wb = this._kw(c.wallbox) || 0;
     const grid = gin - gout;
-    const batP = c.batteries.reduce((a, b) => a + (this._kw(b.power) || 0), 0); // positiv = lädt
+    const batP = c.batteries.reduce((a, b) => a + (this._batP(b) || 0), 0); // positiv = lädt
     const house = Math.max(0, (pv || 0) + grid - wb - batP);
     // Unter 1 kW in Watt, sonst kW mit einer Stelle
     const pw = (key, v) => { if (v === null) { this._set('v' + key, '–'); return; } const w = Math.abs(v) < 1; this._set('v' + key, w ? Math.round(v * 1000) : de(v, 1)); this._set('u' + key, w ? 'W' : 'kW'); };
@@ -1464,7 +1480,7 @@ class ZuhauseCard extends HTMLElement {
     // Batterien
     const socs = [];
     c.batteries.forEach((b, i) => {
-      const soc = this._n(b.soc), p = this._kw(b.power);
+      const soc = this._batSoc(b), p = this._batP(b);
       if (soc === null) {
         if (k['bsoc' + i]) { k['bsoc' + i].className = 'pill off'; this._set('bsoc' + i, 'noch nicht verbunden'); k['bbar' + i].style.width = '0'; this._set('bsub' + i, 'wird angezeigt, sobald das Gerät in Home Assistant ist'); }
       } else {
