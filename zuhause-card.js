@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.18.0';
+const VERSION = '2.18.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -940,7 +940,7 @@ class ZuhauseCard extends HTMLElement {
     it.forEach((b, i) => {
       let a = (i - this._favPos) * st; a = Math.atan2(Math.sin(a), Math.cos(a));
       const z = Math.cos(a);
-      b.style.transform = `translateX(${Math.sin(a) * R}px) translateY(${(z - 1) * 10}px) translateZ(${(z - 1) * R * 0.8 + 24}px) rotateY(${a * 180 / Math.PI * 0.45}deg) scale(${(0.72 + 0.5 * Math.pow(z, 6)).toFixed(3)})`;
+      b.style.transform = `translateX(${Math.sin(a) * R}px) translateY(${(z - 1) * 10}px) translateZ(${(z - 1) * R * 0.8 + 24}px) rotateY(${a * 180 / Math.PI * 0.45}deg) scale(${(0.58 + 0.8 * Math.pow(z, 8)).toFixed(3)})`;
       b.style.opacity = z < 0.2 ? 0 : 0.25 + 0.75 * z * z;
       b.style.setProperty('--lo', Math.max(0, 1 - Math.abs(a) / (st * 0.6)).toFixed(2)); // Name nur bei der vorderen Lampe
       b.style.zIndex = Math.round(z * 100) + 100;
@@ -1608,7 +1608,9 @@ class ZuhauseCard extends HTMLElement {
     // Balkon: Module an den Marstek-Speichern
     const mb = c.batteries.find(b => this._isM(b)), mSoc = mb ? this._batSoc(mb) : null, mP = mb ? this._batP(mb) : null;
     pw('bk', mb && (mSoc !== null || mIn) ? mIn : null);
-    this._set('sbk', mSoc === null ? (mb ? 'noch nicht verbunden' : '') : `Akku ${Math.round(mSoc)} %` + (mP > 0.02 ? ' · lädt' : mP < -0.02 ? ' · gibt ab' : ''));
+    // Ladestand jedes Marstek-Akkus einzeln
+    const mSocs = mb ? this._marstek().map(d => this._n(d.soc)).filter(v => v !== null).map(v => Math.round(v)) : [];
+    this._set('sbk', mSoc === null ? (mb ? 'noch nicht verbunden' : '') : `Akku ${mSocs.join(' · ')} %`);
     // die einzelnen Module (je Marstek zwei Eingänge)
     const mods = mb ? this._marstek().flatMap(d => [d.i1, d.i2]).filter(Boolean).map(id => this._n(id)).filter(v => v !== null) : [];
     this._set('sbk2', mods.length ? mods.map(v => Math.round(v)).join(' · ') + ' W' : '');
