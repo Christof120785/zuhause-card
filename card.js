@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.17.1';
+const VERSION = '2.17.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -543,6 +543,8 @@ class ZuhauseCard extends HTMLElement {
       if (ch && this._lay) { const id = ch.dataset.chide, l = this._lay.hc = this._lay.hc || []; const i = l.indexOf(id); if (i < 0) l.push(id); else l.splice(i, 1); this._save(); this._update(); return; }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return; }
+      const nt = e.target.closest('[data-notiftg]');
+      if (nt) { this._hass.callService('automation', nt.getAttribute('aria-checked') === 'true' ? 'turn_off' : 'turn_on', { entity_id: nt.dataset.notiftg }); return; }
       const nb = e.target.closest('[data-notif]');
       if (nb) { this._notifAction(nb.dataset.notif); return; }
       const hs = e.target.closest('[data-k="hist"]');
@@ -1314,7 +1316,7 @@ class ZuhauseCard extends HTMLElement {
     return { phones, items: [
       { id: 'zuhause_alarm_status', name: 'Alarmanlage scharf / unscharf', ids: pres ? [pres] : [] },
       { id: 'zuhause_alarm_ausgeloest', name: 'Alarm ausgelöst', ids: alarm ? [alarm.entity_id] : [], loud: true },
-      { id: 'zuhause_haustuer', name: 'Haustür geöffnet', ids: door ? [door.entity_id] : [] },
+      { id: 'zuhause_haustuer', name: 'Haustür geöffnet (Türöffner)', ids: door ? [door.entity_id] : [] },
       { id: 'zuhause_carportlicht', name: 'Carportlicht an', ids: carport ? [carport.entity_id] : [] },
       { id: 'zuhause_wasser', name: 'Wasser im Keller', ids: water.map(x => x.entity_id), loud: true },
       { id: 'zuhause_zu_heiss', name: 'Zu heiß (über 35 °C)', ids: temps.map(x => x.entity_id), loud: true },
@@ -1350,17 +1352,28 @@ class ZuhauseCard extends HTMLElement {
     }
     this._notifSig = null; this._renderNotif();
   }
+  // Einmalig: Christof will nur Alarm ausgelöst, zu heiß, Haustür und Carportlicht als Meldung (29.10.2026)
+  _notifDefaults() {
+    const h = this._hass, L = this._lay;
+    if (!L || L.nOff1 || !(h.user && h.user.is_admin)) return;
+    const off = Object.values(h.states).filter(x => x.entity_id.startsWith('automation.') && ['zuhause_alarm_status', 'zuhause_wasser'].includes(x.attributes.id));
+    if (!off.length) return;
+    L.nOff1 = 1; this._save();
+    h.callService('automation', 'turn_off', { entity_id: off.map(x => x.entity_id) });
+  }
   _renderNotif() {
+    this._notifDefaults();
     const k = this._k.notif; if (!k) return;
     const admin = this._hass.user && this._hass.user.is_admin;
     if (!this._arrange || !admin) { if (k.innerHTML) { k.innerHTML = ''; this._notifSig = null; } return; }
     const plan = this._notifPlan();
-    const autoIds = Object.values(this._hass.states).filter(x => x.entity_id.startsWith('automation.') && x.attributes.id).reduce((m, x) => (m[x.attributes.id] = x.state, m), {});
+    const autos = Object.values(this._hass.states).filter(x => x.entity_id.startsWith('automation.') && x.attributes.id);
+    const autoIds = autos.reduce((m, x) => (m[x.attributes.id] = x.state, m), {}), autoEnt = autos.reduce((m, x) => (m[x.attributes.id] = x.entity_id, m), {});
     const sig = JSON.stringify([plan, autoIds, this._notifMsg]);
     if (sig === this._notifSig) return; this._notifSig = sig;
     const ph = plan.phones.map(p => p.replace('mobile_app_', '').replace(/_/g, ' ')).join(', ') || 'keins gefunden';
     k.innerHTML = `<div class="sect">Handy-Meldungen</div><p class="sub" style="margin:0 0 6px">Kommen über die Home-Assistant-App an: ${ph}</p>`
-      + plan.items.map(it => `<div class="row"><div class="txt"><b>${it.name}</b><div class="s" style="color:var(--muted);font-size:12px">${!it.ids.length ? 'Gerät nicht gefunden' : autoIds[it.id] === 'on' ? '✓ aktiv' : autoIds[it.id] ? 'ausgeschaltet' : 'noch nicht eingerichtet'}</div></div></div>`).join('')
+      + plan.items.map(it => `<div class="row"><div class="txt"><b>${it.name}</b><div class="s" style="color:var(--muted);font-size:12px">${!it.ids.length ? 'Gerät nicht gefunden' : autoIds[it.id] === 'on' ? '✓ aktiv' : autoIds[it.id] ? 'ausgeschaltet' : 'noch nicht eingerichtet'}</div></div>${autoEnt[it.id] ? `<button class="tg" role="switch" aria-label="${it.name}" aria-checked="${autoIds[it.id] === 'on'}" data-notiftg="${autoEnt[it.id]}"></button>` : ''}</div>`).join('')
       + `<div style="display:flex;gap:8px;margin-top:8px"><button class="btn" data-notif="setup">Einrichten</button><button class="btn" data-notif="test">Testmeldung</button></div>`
       + (this._notifMsg ? `<p class="sub" style="margin-top:6px">${this._notifMsg}</p>` : '');
   }
