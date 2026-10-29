@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.13.4';
+const VERSION = '2.13.5';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -178,7 +178,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 /* wallbox */
 .wbpics{display:grid;grid-template-columns:3fr 1fr;gap:8px;margin:4px 0 8px}
 .carpic img{width:86%}.wbpic img{width:80%}
-.wbt{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.wbt{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 /* security */
 .shield{width:64px;height:64px;border-radius:50%;background:var(--batt-soft);color:var(--ok);display:grid;place-items:center;margin:4px auto}
 .shield svg{width:30px;height:30px}
@@ -430,7 +430,6 @@ class ZuhauseCard extends HTMLElement {
         <div class="prog"><i data-k="cbar" style="width:0;background:var(--grid)"></i></div>
         <div class="wbt">
           <div class="tile" data-more="${c.wallbox}"><div class="l">Ladeleistung</div><div class="v num"><span data-k="wbp">–</span><small>kW</small></div></div>
-          <div class="tile"><div class="l">Laden</div><div class="v" style="font-size:15px;margin-top:6px"><button class="tg" role="switch" aria-label="Laden freigeben" aria-checked="false" data-toggle="${c.wallbox_release}" data-k="wbr"></button></div></div>
           <div class="tile"><div class="l">Heute geladen</div><div class="v num"><span data-k="wbtoday">–</span><small>kWh</small></div></div>
         </div>
       </section>
@@ -1370,8 +1369,6 @@ class ZuhauseCard extends HTMLElement {
     this._set('wbp', de(wb, 1));
     this._set('wbh', wb > 0.05 ? 'Auto lädt' : 'Wallbox bereit');
     this._set('wbs', wb > 0.05 ? ((pv || 0) > wb ? 'Mit Sonnenstrom' : 'Mit Netz- und Sonnenstrom') : 'Gerade kein Ladevorgang');
-    const rel = this._s(c.wallbox_release);
-    k.wbr.setAttribute('aria-checked', rel && rel.state === 'on' ? 'true' : 'false');
 
     // Sicherheit
     const open = c.contacts.filter(x => { const s = this._s(x.entity); return s && s.state === 'on'; });
