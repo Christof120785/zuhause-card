@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.19.1';
+const VERSION = '2.20.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -47,7 +47,8 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
   ['Flur', /flur/i], ['Esszimmer', /esszimmer/i], ['Carport', /carportlicht( 1)?$/i]];
 
 // Haus-Bild für die Energie-Kachel (liegt im Repo)
-const HAUS = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/haus-energie2.webp';
+const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
+const HAUS = IMG + 'haus-energie2.webp';
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -75,6 +76,13 @@ const IC = {
   plug: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   door: '<path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M4 21h16"/><circle cx="14.5" cy="12" r="1"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.7-1.3-.7-2.2 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10" cy="7.2" r="1.2"/><circle cx="14.5" cy="7.2" r="1.2"/>',
+  paletteF: '<path fill="currentColor" stroke="none" d="M12 2.5a9.5 9.5 0 1 0 0 19c1.3 0 1.9-.9 1.9-1.8 0-1-.8-1.4-.8-2.4 0-1.1.9-1.8 2-1.8h2.2a4.2 4.2 0 0 0 4.2-4.2C21.5 6.6 17.3 2.5 12 2.5z"/><circle cx="7.3" cy="11.2" r="1.5" fill="#2a3442" stroke="none"/><circle cx="9.8" cy="7.2" r="1.5" fill="#2a3442" stroke="none"/><circle cx="14.6" cy="7.2" r="1.5" fill="#2a3442" stroke="none"/>',
+  timerF: '<circle cx="12" cy="13.5" r="8" fill="currentColor" stroke="none"/><path d="M10 2.5h4M12 2.5v3" /><path d="M12 9.5v4.2l2.6 1.6" stroke="#2a3442"/>',
+  timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M10 2h4"/>',
+  power: '<path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k] || ''}</svg>`;
@@ -207,16 +215,26 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .fi span{font-size:11.5px;opacity:var(--lo,1)}
 .fi.on i{background:var(--sun);color:#fff;box-shadow:0 0 0 6px rgba(239,181,68,.22),0 0 26px rgba(239,181,68,.45)}
 .fi.na{filter:grayscale(1)}
-.favp{margin-top:8px;border-radius:18px;background:linear-gradient(160deg,#2b3b4f,var(--hero));color:var(--hero-fg);padding:12px 14px 14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
-.favp .hd{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px}
-.favp .hd span{font-weight:500;color:var(--hero-mut);font-size:12.5px}
-.favp .x{all:unset;cursor:pointer;margin-left:auto;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.1);display:grid;place-items:center;font-size:16px}
-.favp .tgl{all:unset;cursor:pointer;padding:6px 12px;border-radius:99px;background:rgba(255,255,255,.12);font-size:12px;font-weight:700}
-.favp .tgl.on{background:var(--sun);color:#fff}
-.favp .dim{height:30px;margin:10px 0 2px}
-.favp .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--hero-mut);margin:10px 0 6px}
-.favp .scb{background:rgba(255,255,255,.12);color:var(--hero-fg)}
-.favp .cmore{background:rgba(255,255,255,.12);color:var(--hero-fg)}
+.hxo{position:fixed;inset:0;z-index:20;background:rgba(6,10,16,.62);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);animation:hxf .2s ease-out}
+.hxo[hidden]{display:none}
+.hxw{position:absolute;left:50%;top:50%}
+.hx{all:unset;box-sizing:border-box;position:absolute;left:0;top:0;width:var(--w);height:var(--h);background:center/100% 100% no-repeat;filter:drop-shadow(0 0 7px rgba(170,200,235,.22)) drop-shadow(0 10px 16px rgba(0,0,0,.45));transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y)));cursor:pointer;animation:hxp .3s cubic-bezier(.2,.9,.3,1.25) both;animation-delay:var(--dl,0s);-webkit-tap-highlight-color:transparent}
+.hx>div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--u) * .03);color:#eef3f7;font-size:calc(var(--u) * .145);font-weight:500;text-align:center;line-height:1.12;padding:0 18%}
+.hx .ic{width:calc(var(--u) * .3);height:calc(var(--u) * .3);color:#f4b63f}.hx .ic svg{width:100%;height:100%}
+.hx.red .ic{color:#ff5a4a}
+.hx.gold{filter:drop-shadow(0 0 10px rgba(239,181,68,.45)) drop-shadow(0 10px 16px rgba(0,0,0,.45))}
+.hx.sm>div{font-size:calc(var(--u) * .1);font-weight:600;padding:0 16%;line-height:1.1}
+.hx .pct{font-size:calc(var(--u) * .1);opacity:.7}
+.hx.ctr>div{font-weight:700;font-size:calc(var(--u) * .115);gap:calc(var(--u) * .06);padding:0 14%}
+.hx .bulb{width:calc(var(--u) * .6);height:calc(var(--u) * .6);border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;flex:none}
+.hx .bulb svg{width:50%;height:50%;color:#fff}.hx.lon .bulb{background:#f4b63f;box-shadow:0 0 calc(var(--u) * .2) rgba(244,182,63,.55)}
+.hx.dm>div{gap:calc(var(--u) * .07);padding:0 14%}
+.hx .dl{font-size:calc(var(--u) * .14)}
+.hx .bar{position:relative;width:72%;height:calc(var(--u) * .18);border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden;flex:none}
+.hx .bar i{position:absolute;inset:0 auto 0 0;width:var(--p,50%);border-radius:99px;background:linear-gradient(90deg,#f2b13a,#fffaf0)}
+.hx .bar input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+@keyframes hxp{from{opacity:0;transform:translate(-50%,-50%) scale(.3)}}
+@keyframes hxf{from{opacity:0}}
 .carrow{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13.5px;color:var(--muted);cursor:pointer}.carrow b{color:var(--fg)}
 .cbar{flex:1;height:7px;border-radius:9px;background:var(--tile);overflow:hidden;min-width:40px}.cbar i{display:block;height:100%;width:0;background:var(--grid);border-radius:9px}
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
@@ -526,7 +544,7 @@ class ZuhauseCard extends HTMLElement {
           <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span></div><div class="s" data-k="sbat"></div></div>
           <div class="lab dn" style="left:66%" data-more="${c.grid_in}"><div class="t"><span class="dot" data-k="dgrid" style="background:var(--grid)"></span>Netz</div><div class="v num"><span data-k="vgrid">–</span><small data-k="ugrid">kW</small></div><div class="s" data-k="sgrid"></div></div>
         </div></div>
-        <div class="fav" data-k="fav"></div><div class="favp" data-k="favp" hidden></div>
+        <div class="fav" data-k="fav"></div><div class="hxo" data-k="favp" lang="de" hidden></div>
         <div class="carrow" data-more="${c.wallbox}"><span>Auto <b class="num" data-k="csoc">–</b></span><div class="cbar"><i data-k="cbar"></i></div><span class="num">⚡ <span data-k="wbp">–</span> kW · <b data-k="wbtoday">–</b> <b>kWh</b></span></div>
         <div data-k="wbmode"></div>
       </section>
@@ -591,6 +609,7 @@ class ZuhauseCard extends HTMLElement {
     root.addEventListener('focusout', e => { if (e.target.matches('input.rn,select')) this._busy = 0; });
     root.addEventListener('input', e => {
       const t = e.target;
+      if (t.parentNode && t.parentNode.classList && t.parentNode.classList.contains('bar')) t.parentNode.style.setProperty('--p', t.value + '%');
       if (t.dataset.dim || t.dataset.pos) {
         this._busy = Date.now() + 60000;
         const s = t.closest('.row') && t.closest('.row').querySelector('.txt span');
@@ -619,9 +638,16 @@ class ZuhauseCard extends HTMLElement {
       if (this._roomClick(e)) return;
       const ch = e.target.closest('[data-chide]');
       if (ch && this._lay) { const id = ch.dataset.chide, l = this._lay.hc = this._lay.hc || []; const i = l.indexOf(id); if (i < 0) l.push(id); else l.splice(i, 1); this._save(); this._update(); return; }
-      if (e.target.closest('[data-favx]')) { this._favOpen = null; this._renderFavP(); return; }
-      const ft = e.target.closest('[data-favtg]');
-      if (ft) { const id = ft.dataset.favtg; this._hass.callService(id.split('.')[0], 'toggle', { entity_id: id }); return; }
+      const ho = e.target.closest('.hxo');
+      if (ho) {
+        const hb = e.target.closest('[data-hx]'), a = hb && hb.dataset.hx, id = this._favOpen;
+        if (!hb || a === 'more') { this._favOpen = null; this._favSub = ''; this._renderFavP(); if (!hb) return; }
+        else if (a === 'tg') { this._hass.callService(id.split('.')[0], 'toggle', { entity_id: id }); return; }
+        else if (a === 'col' || a === 'sc') { this._favSub = a; this._renderFavP(); return; }
+        else if (a === 'back') { this._favSub = ''; this._renderFavP(); return; }
+        else if (a === 'tmr') { this._hass.callService('light', 'turn_off', { entity_id: id, transition: 60 * (+hb.dataset.min || 30) }); this._favOpen = null; this._renderFavP(); return; }
+        else if (a === 'none') return;
+      }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return; }
       const nt = e.target.closest('[data-notiftg]');
@@ -963,24 +989,72 @@ class ZuhauseCard extends HTMLElement {
     });
   }
   // Bedienfeld nach langem Drücken: an/aus, dimmen, Farben, Szenen (Hue-Szenen der Gruppe)
+  // Waben-Ansicht nach langem Drücken: Lampe in der Mitte, drumherum Dimmen, Farbe, Szenen, Timer, An/Aus, Mehr
   _renderFavP() {
     const P = this._k.favp; if (!P) return;
     const s = this._favOpen && this._s(this._favOpen);
     if (!s) { P.hidden = true; this._favPSig = null; return; }
     P.hidden = false;
-    const on = s.state === 'on', pct = this._pct(s), name = this._favOpenName || s.attributes.friendly_name;
-    const sig = s.entity_id + on + (s.attributes.color_mode || '') + JSON.stringify(s.attributes.hs_color || '');
-    if (sig === this._favPSig) { const sp = P.querySelector('[data-k2="pct"]'); if (sp) sp.textContent = on ? `${pct ?? 100} %` : ''; return; }
+    const on = s.state === 'on', pct = this._pct(s), name = this._favOpenName || s.attributes.friendly_name, sub = this._favSub || '';
+    const sig = [s.entity_id, on, sub, s.attributes.color_mode, JSON.stringify(s.attributes.hs_color || '')].join('|');
+    if (sig === this._favPSig) { const sp = P.querySelector('[data-k2="pct"]'); if (sp) sp.textContent = on ? `${pct ?? 100} %` : 'aus'; return; }
     this._favPSig = sig;
+    const isL = s.entity_id.startsWith('light.'), modes = s.attributes.supported_color_modes || [];
+    const dimm = isL && modes.some(m => m !== 'onoff'), col = isL && modes.some(m => /^(hs|xy|rgb|rgbw|rgbww)$/.test(m));
     const fn = (s.attributes.friendly_name || '').trim().toLowerCase();
     const sc = Object.values(this._hass.states).filter(x => x.entity_id.startsWith('scene.') && (x.attributes.group_name || '').trim().toLowerCase() === fn)
       .sort((a, b) => (a.attributes.name || '').localeCompare(b.attributes.name || ''));
-    const dimm = s.entity_id.startsWith('light.') && (s.attributes.supported_color_modes || []).some(m => m !== 'onoff');
-    P.innerHTML = `<div class="hd">${name} <span data-k2="pct">${on ? `${pct ?? 100} %` : ''}</span>`
-      + `<button class="tgl${on ? ' on' : ''}" data-favtg="${s.entity_id}">${on ? 'An' : 'Aus'}</button><button class="x" data-favx aria-label="Schließen">×</button></div>`
-      + (dimm ? `<input type="range" class="dim" min="1" max="100" value="${on ? pct || 100 : 50}" data-dim="${s.entity_id}" aria-label="${name} dimmen">` : '')
-      + (on ? this._colors(s, name) : '')
-      + (sc.length ? `<div class="lbl">Szenen</div><div class="scw">${sc.map(x => `<button class="scb" type="button" data-scene="${x.entity_id}">${x.attributes.name || x.attributes.friendly_name}</button>`).join('')}</div>` : '');
+    // Waben sind Bilder im Glas-Look (img/wabe*.webp), Text und Symbole liegen darüber
+    const hx = (x, y, w, h, body, attr = '', cls = '', i = 0) => {
+      const im = /gold/.test(cls) ? 'wabe-gold' : w / h > 1.6 ? 'wabe-breit' : 'wabe';
+      return `<button class="hx ${cls}" style="--x:${x.toFixed(1)}px;--y:${y.toFixed(1)}px;--w:${w.toFixed(1)}px;--h:${h.toFixed(1)}px;--dl:${(i * 0.035).toFixed(3)}s;background-image:url(${IMG}${im}.webp)" ${attr}><div>${body}</div></button>`;
+    };
+    const ic = k => `<span class="ic">${svg(k)}</span>`;
+    const vw = this.getBoundingClientRect().width || 390;
+    let html = '';
+    if (!sub) {
+      // Maße aus Christofs Vorlage, in Einheiten der Wabenbreite u (Farbe-Wabe = 1): [x, y, Breite, Höhe] relativ zur Lampe
+      const u = Math.min(118, Math.floor((vw - 20) / 4.1)), ox = sc.length ? -0.505 * u : 0;
+      const at = (x, y, w, h, body, attr, cls, i) => hx(ox + x * u, y * u, w * u, h * u, body, attr, cls, i);
+      this._k.favp.style.setProperty('--u', u + 'px');
+      html += at(0, 0, 1.29, 1.08, `<span class="bulb">${svg('bulb')}</span><span class="nm">${name}</span>`, 'data-hx="tg"', 'ctr' + (on ? ' lon' : ''), 0);
+      html += at(0, -1.035, 1.57, 0.88, dimm ? `<span class="dl">Dimmen</span><span class="bar" style="--p:${on ? pct || 100 : 0}%"><i></i><input type="range" min="1" max="100" value="${on ? pct || 100 : 50}" data-dim="${s.entity_id}" aria-label="${name} dimmen"></span>` : `<span class="dl">${on ? 'An' : 'Aus'}</span>`, 'data-hx="none"', 'dm', 1);
+      if (col) html += at(-1.005, -0.424, 1, 0.874, `${ic('paletteF')}Farbe`, 'data-hx="col"', '', 2);
+      if (sc.length) html += at(1.005, -0.424, 1, 0.874, 'Szenen', 'data-hx="sc"', 'gold', 3);
+      if (isL) html += at(-0.97, 0.56, 1.09, 0.92, `${ic('timerF')}Timer<span class="pct">30 min</span>`, 'data-hx="tmr" data-min="30"', '', 4);
+      html += at(0.97, 0.56, 1.09, 0.92, `${ic('power')}Power`, 'data-hx="tg"', 'red', 5);
+      if (isL) html += at(0, 1.056, 1.09, 0.92, `${ic('timer')}Timer<span class="pct">60 min</span>`, 'data-hx="tmr" data-min="60"', '', 6);
+      // die ersten drei Szenen als kleine Waben rechts neben "Szenen"
+      [[1.78, -0.63, 0.61, 0.54], [2.22, -0.25, 0.61, 0.54], [1.67, 0.056, 0.71, 0.62]].forEach(([x, y, w, h], i) => {
+        const z = sc[i]; if (z) html += at(x, y, w, h, this._shy(z.attributes.name || z.attributes.friendly_name), `data-scene="${z.entity_id}" data-hx="pick"`, 'sm', 7 + i);
+      });
+    } else {
+      const w = Math.min(90, Math.floor(vw / 4.6)), h = w * 0.895;
+      this._k.favp.style.setProperty('--u', (w / 0.75).toFixed(0) + 'px');
+      const g = []; for (let q = -2; q <= 2; q++) for (let r = -2; r <= 2; r++) { if (Math.abs(q + r) > 2 || (!q && !r)) continue; g.push([(w * 0.79 + 5) * q, (h + 5) * (r + q / 2)]); }
+      g.sort((a, b) => Math.hypot(...a) - Math.hypot(...b) || Math.atan2(a[1], a[0]) - Math.atan2(b[1], b[0]));
+      html += hx(0, 0, w, h, `${ic('back')}Zurück`, 'data-hx="back"', 'sm gold');
+      const items = sub === 'col'
+        ? LCOL.map((c, i) => [`<span class="bulb" style="--b:30px;background:hsl(${c[1]},95%,52%)"></span>${c[0]}`, `data-lcol="${s.entity_id}|${i}"`]).concat([[`<span class="bulb" style="--b:30px;background:#fff1dc"></span>Weiß`, `data-lcol="${s.entity_id}|w"`]])
+        : sc.map(x => [this._shy(x.attributes.name || x.attributes.friendly_name), `data-scene="${x.entity_id}"`]);
+      items.slice(0, g.length).forEach(([b, a], i) => { html += hx(g[i][0], g[i][1], w, h, b, a + ' data-hx="pick"', 'sm', i + 1); });
+    }
+    P.innerHTML = `<div class="hxw">${html}</div>`;
+  }
+  // lange Wörter in kleinen Waben mit Trennstrich umbrechen lassen
+  _shy(s) {
+    const V = /[aeiouäöüy]/i;
+    return s.split(' ').map(w => {
+      if (w.length <= 8) return w;
+      // Doppelbuchstaben (Entspan-nen) oder Vokal-Konsonant|Konsonant-Vokal (Kon-zentrieren), möglichst nah an der Mitte
+      let best = -1;
+      for (let i = 3; i <= w.length - 3; i++) {
+        const ok = (w[i - 1].toLowerCase() === w[i].toLowerCase() && !V.test(w[i])) || (!V.test(w[i - 1]) && !V.test(w[i]) && V.test(w[i + 1]) && V.test(w[i - 2]));
+        if (ok && (best < 0 || Math.abs(i - w.length / 2) < Math.abs(best - w.length / 2))) best = i;
+      }
+      if (best < 0) best = Math.ceil(w.length / 2);
+      return w.slice(0, best) + '\u00AD' + w.slice(best);
+    }).join(' ');
   }
   // Lampen stehen auf einem Ring; vorne groß, nach hinten kleiner und blasser
   _favLay() {
@@ -1010,7 +1084,7 @@ class ZuhauseCard extends HTMLElement {
         if (moved || x0 === null) return;
         const fs = this._favs(), x = fs[+b.dataset.fi % fs.length];
         if (!x.s) return;
-        long = true; this._favOpen = x.s.entity_id; this._favOpenName = x.name; this._favPSig = null;
+        long = true; this._favOpen = x.s.entity_id; this._favOpenName = x.name; this._favSub = ''; this._favPSig = null;
         const i = [...el.children].indexOf(b), n = el.children.length; this._favPos = Math.round(this._favPos + (((i - this._favPos) % n + n + n / 2) % n - n / 2));
         this._favLay(); this._renderFavP();
         if (navigator.vibrate) navigator.vibrate(15);
