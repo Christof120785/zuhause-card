@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.13.5';
+const VERSION = '2.14.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -178,6 +178,10 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 /* wallbox */
 .wbpics{display:grid;grid-template-columns:3fr 1fr;gap:8px;margin:4px 0 8px}
 .carpic img{width:86%}.wbpic img{width:80%}
+.segs{display:flex;gap:8px;margin-top:10px}
+.seg{all:unset;cursor:pointer;flex:1;text-align:center;padding:10px 8px;border-radius:12px;background:var(--tile);font-size:13.5px;font-weight:600;color:var(--fg)}
+.seg.on{background:var(--sun);color:#fff}
+.seg[disabled]{opacity:.45;cursor:default}
 .wbt{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 /* security */
 .shield{width:64px;height:64px;border-radius:50%;background:var(--batt-soft);color:var(--ok);display:grid;place-items:center;margin:4px auto}
@@ -430,8 +434,9 @@ class ZuhauseCard extends HTMLElement {
         <div class="prog"><i data-k="cbar" style="width:0;background:var(--grid)"></i></div>
         <div class="wbt">
           <div class="tile" data-more="${c.wallbox}"><div class="l">Ladeleistung</div><div class="v num"><span data-k="wbp">–</span><small>kW</small></div></div>
-          <div class="tile"><div class="l">Heute geladen</div><div class="v num"><span data-k="wbtoday">–</span><small>kWh</small></div></div>
+          <div class="tile"><div class="l" data-k="wbel">Heute geladen</div><div class="v num"><span data-k="wbtoday">–</span><small>kWh</small></div></div>
         </div>
+        <div data-k="wbmode"></div>
       </section>
 
       <section class="card sec" data-sec="sec">
@@ -520,6 +525,8 @@ class ZuhauseCard extends HTMLElement {
     root.addEventListener('click', e => {
       if (e.target.closest('input,select')) return;
       if (this._roomClick(e)) return;
+      const wm = e.target.closest('[data-wbmode]');
+      if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._hass.callService('select', 'select_option', { entity_id: eid, option: opt }); return; }
       const nb = e.target.closest('[data-notif]');
       if (nb) { this._notifAction(nb.dataset.notif); return; }
       const et = e.target.closest('[data-etab]');
@@ -1308,6 +1315,35 @@ class ZuhauseCard extends HTMLElement {
       + (this._notifMsg ? `<p class="sub" style="margin-top:6px">${this._notifMsg}</p>` : '');
   }
 
+  // ---------- Wallbox: Betriebsart PV / Schnell per Knopf (SMA EV Charger) ----------
+  _wbEnt(doms, re) {
+    const h = this._hass;
+    const x = Object.values(h.states).find(s => doms.includes(s.entity_id.split('.')[0]) && (s.entity_id.includes('smaev') || /wallbox|ladestation|ev charger/i.test(s.attributes.friendly_name || '')) && re.test(s.attributes.friendly_name || ''));
+    return x || null;
+  }
+  _wbSess() {
+    const s = this._wbEnt(['sensor'], /energie ladevorgang|charging session energy/i);
+    if (!s) return false;
+    let v = parseFloat(s.state); if (isNaN(v)) return false;
+    if ((s.attributes.unit_of_measurement || '').toLowerCase() === 'wh') v /= 1000;
+    this._set('wbel', 'Dieser Ladevorgang'); this._set('wbtoday', de(v, 1));
+    return true;
+  }
+  _renderWbMode() {
+    const k = this._k.wbmode; if (!k) return;
+    this._wbSess();
+    const sel = this._wbEnt(['select'], /betriebsart des ladevorgangs|charging mode|operating mode of charge/i);
+    if (!sel) { if (k.innerHTML) k.innerHTML = ''; return; }
+    const opts = sel.attributes.options || [], cur = sel.state;
+    const pv = opts.find(o => /optimiert|optimized/i.test(o)), fast = opts.find(o => /schnell|fast/i.test(o));
+    const sw = this._wbEnt(['sensor'], /drehschalter|rotary switch/i);
+    const locked = sw && /schnell|fast/i.test(sw.state);
+    const btn = (o, label) => o ? `<button class="seg${cur === o ? ' on' : ''}" data-wbmode="${sel.entity_id}|${o}" ${locked ? 'disabled' : ''}>${label}</button>` : '';
+    const html = `<div class="segs">${btn(pv, '☀ PV-Laden')}${btn(fast, '⚡ Schnell')}</div>`
+      + (locked ? `<p class="sub" style="margin:6px 0 0;color:var(--warn,#c77d18)">Der Drehschalter an der Wallbox steht auf Schnellladen. Stell ihn einmal auf die zweite Stellung, dann kannst du hier umschalten.</p>` : '');
+    if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
+  }
+
   _update() {
     const c = this._cfg, k = this._k;
     const h = new Date().getHours();
@@ -1369,6 +1405,7 @@ class ZuhauseCard extends HTMLElement {
     this._set('wbp', de(wb, 1));
     this._set('wbh', wb > 0.05 ? 'Auto lädt' : 'Wallbox bereit');
     this._set('wbs', wb > 0.05 ? ((pv || 0) > wb ? 'Mit Sonnenstrom' : 'Mit Netz- und Sonnenstrom') : 'Gerade kein Ladevorgang');
+    this._renderWbMode();
 
     // Sicherheit
     const open = c.contacts.filter(x => { const s = this._s(x.entity); return s && s.state === 'on'; });
@@ -1527,7 +1564,7 @@ class ZuhauseCard extends HTMLElement {
       this._set('today', `${de(pv[t], 1)} kWh`);
       const use = pv[t] + gin[t] - gout[t];
       this._set('aut', use > 0 ? `${Math.round(Math.max(0, Math.min(1, 1 - gin[t] / use)) * 100)} %` : '–');
-      this._set('wbtoday', de(wb[t], 1));
+      this._wbDay = wb[t]; if (!this._wbSess()) this._set('wbtoday', de(wb[t], 1));
       // Gestern/Heute: Leistung je Viertelstunde in kW (aus 5-Minuten-Statistik)
       const q = new Map();
       const addQ = (id, key) => (st5[id] || []).forEach(r => {
