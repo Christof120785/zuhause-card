@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.14.0';
+const VERSION = '2.14.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -526,7 +526,7 @@ class ZuhauseCard extends HTMLElement {
       if (e.target.closest('input,select')) return;
       if (this._roomClick(e)) return;
       const wm = e.target.closest('[data-wbmode]');
-      if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._hass.callService('select', 'select_option', { entity_id: eid, option: opt }); return; }
+      if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return; }
       const nb = e.target.closest('[data-notif]');
       if (nb) { this._notifAction(nb.dataset.notif); return; }
       const et = e.target.closest('[data-etab]');
@@ -1329,13 +1329,30 @@ class ZuhauseCard extends HTMLElement {
     this._set('wbel', 'Dieser Ladevorgang'); this._set('wbtoday', de(v, 1));
     return true;
   }
+  async _setWbMode(eid, opt) {
+    const h = this._hass;
+    if (/vorgabe|setpoint/i.test(opt)) {
+      const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
+      if (en && du) {
+        const kwh = Math.min(+en.attributes.max || 100, 100);
+        // 11 kW sind das Maximum der Wallbox: Ziel so wählen, dass sie die ganze Zeit voll laden muss
+        const min = Math.max(+du.attributes.min || 1, Math.min(+du.attributes.max || 1e9, Math.floor(kwh / 11 * 60)));
+        await h.callService('number', 'set_value', { entity_id: en.entity_id, value: kwh }).catch(() => {});
+        await h.callService('number', 'set_value', { entity_id: du.entity_id, value: min }).catch(() => {});
+      }
+    }
+    h.callService('select', 'select_option', { entity_id: eid, option: opt });
+  }
+
   _renderWbMode() {
     const k = this._k.wbmode; if (!k) return;
     this._wbSess();
     const sel = this._wbEnt(['select'], /betriebsart des ladevorgangs|charging mode|operating mode of charge/i);
     if (!sel) { if (k.innerHTML) k.innerHTML = ''; return; }
     const opts = sel.attributes.options || [], cur = sel.state;
-    const pv = opts.find(o => /optimiert|optimized/i.test(o)), fast = opts.find(o => /schnell|fast/i.test(o));
+    const pv = opts.find(o => /optimiert|optimized/i.test(o));
+    // ohne eigene Option "Schnellladen": "Laden mit Vorgabe" mit so viel Energie in so kurzer Zeit, dass die Wallbox voll lädt
+    const fast = opts.find(o => /schnell|fast/i.test(o)) || opts.find(o => /vorgabe|setpoint/i.test(o));
     const sw = this._wbEnt(['sensor'], /drehschalter|rotary switch/i);
     const locked = sw && /schnell|fast/i.test(sw.state);
     const btn = (o, label) => o ? `<button class="seg${cur === o ? ' on' : ''}" data-wbmode="${sel.entity_id}|${o}" ${locked ? 'disabled' : ''}>${label}</button>` : '';
