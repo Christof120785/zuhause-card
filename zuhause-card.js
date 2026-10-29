@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.13.1';
+const VERSION = '2.13.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1296,8 +1296,9 @@ class ZuhauseCard extends HTMLElement {
     const h = this._hass, plan = this._notifPlan();
     if (!plan.phones.length) { this._notifMsg = 'Kein Handy mit der Home-Assistant-App gefunden.'; this._notifSig = null; this._renderNotif(); return; }
     if (what === 'test') {
-      plan.phones.forEach(p => h.callService('notify', p, { title: 'Zuhause', message: 'Testmeldung vom Dashboard' }));
-      this._notifMsg = 'Testmeldung gesendet.';
+      const res = await Promise.all(plan.phones.map(p => h.callService('notify', p, { title: 'Zuhause', message: 'Testmeldung vom Dashboard an ' + p.replace('mobile_app_', '') })
+        .then(() => `${p.replace('mobile_app_', '')}: gesendet`, e => `${p.replace('mobile_app_', '')}: Fehler (${(e && (e.message || e.code)) || 'unbekannt'})`)));
+      this._notifMsg = res.join(' · ');
     } else {
       let ok = 0, fail = 0;
       for (const it of plan.items) {
