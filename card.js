@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.12.0';
+const VERSION = '2.13.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -442,6 +442,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="stats two"><div><b class="num" data-k="nopen">–</b><span>offen</span></div><div><b class="num" data-k="nclosed">–</b><span>geschlossen</span></div></div>
         ${contacts}
         <div data-k="hints"></div>
+        <div data-k="notif"></div>
       </section>
 
       <section class="card home" data-sec="home">
@@ -520,6 +521,8 @@ class ZuhauseCard extends HTMLElement {
     root.addEventListener('click', e => {
       if (e.target.closest('input,select')) return;
       if (this._roomClick(e)) return;
+      const nb = e.target.closest('[data-notif]');
+      if (nb) { this._notifAction(nb.dataset.notif); return; }
       const et = e.target.closest('[data-etab]');
       if (et) { this._etab = +et.dataset.etab; this._drawEnergy(); return; }
       const t = e.target.closest('[data-toggle]');
@@ -986,7 +989,7 @@ class ZuhauseCard extends HTMLElement {
     const room = id => rooms.find(r => r.id === id);
     const done = () => { this._roomSig = null; this._busy = 0; this._renderRooms(); return true; };
     if (!this._lay && (d.mv || d.hide || d.boost || d.q || d.tmv || d.thide)) return true;
-    if (t.hasAttribute('data-arrange')) { this._arrange = !this._arrange; return done(); }
+    if (t.hasAttribute('data-arrange')) { this._arrange = !this._arrange; this._renderNotif(); return done(); }
     if (d.tmv || d.thide) {
       const T = this._tiles();
       if (d.tmv) {
@@ -1234,10 +1237,80 @@ class ZuhauseCard extends HTMLElement {
   }
   _set(k, v) { const e = this._k[k]; if (e && e.textContent !== String(v)) e.textContent = v; }
 
+  // ---------- Handy-Meldungen (ersetzen die Pushover-Programme der CCU) ----------
+  // Sucht die passenden Geräte und legt dafür Automationen in Home Assistant an, die über die App aufs Handy melden.
+  _notifPlan() {
+    const h = this._hass, st = Object.values(h.states);
+    const ent = x => h.entities && h.entities[x.entity_id];
+    const hm = x => { const e = ent(x); return e && e.platform === 'homematicip_local'; };
+    const nm = x => (x.attributes.friendly_name || '').trim();
+    const dom = x => x.entity_id.split('.')[0];
+    const pick = (doms, re, not) => st.find(x => hm(x) && doms.includes(dom(x)) && re.test(nm(x)) && !(not && not.test(nm(x))));
+    const phones = Object.keys((h.services && h.services.notify) || {}).filter(x => x.startsWith('mobile_app_'));
+    const pres = this._presence();
+    const alarm = pick(['binary_sensor', 'sensor', 'switch'], /(^|\s)(SV\s+)?alarm$/i);
+    const door = pick(['switch'], /haust(ü|ue)r( 1)?$/i, /optisch|sperr/i);
+    const carport = pick(['switch', 'light'], /carportlicht( 1)?$/i, /gesperrt|sperr|dauerhaft/i);
+    const water = st.filter(x => hm(x) && dom(x) === 'binary_sensor' && /wasser/i.test(nm(x)));
+    const temps = st.filter(x => hm(x) && dom(x) === 'sensor' && x.attributes.device_class === 'temperature' && !/au(ß|ss)en|garten|carport|terrasse/i.test(nm(x)));
+    return { phones, items: [
+      { id: 'zuhause_alarm_status', name: 'Alarmanlage scharf / unscharf', ids: pres ? [pres] : [] },
+      { id: 'zuhause_alarm_ausgeloest', name: 'Alarm ausgelöst', ids: alarm ? [alarm.entity_id] : [], loud: true },
+      { id: 'zuhause_haustuer', name: 'Haustür geöffnet', ids: door ? [door.entity_id] : [] },
+      { id: 'zuhause_carportlicht', name: 'Carportlicht an', ids: carport ? [carport.entity_id] : [] },
+      { id: 'zuhause_wasser', name: 'Wasser im Keller', ids: water.map(x => x.entity_id), loud: true },
+      { id: 'zuhause_zu_heiss', name: 'Zu heiß (über 35 °C)', ids: temps.map(x => x.entity_id), loud: true },
+    ] };
+  }
+  _notifCfg(it, phones) {
+    const loud = it.loud ? { priority: 'high', ttl: 0, channel: 'alarm_stream', push: { 'interruption-level': 'time-sensitive', sound: 'default' } } : { push: { sound: 'default' } };
+    const send = (title, message) => phones.map(p => ({ action: 'notify.' + p, data: { title, message, data: loud } }));
+    const base = { id: it.id, alias: 'Zuhause: ' + it.name, description: 'Angelegt vom Zuhause-Dashboard', mode: 'queued' };
+    const nb = { not_from: ['unavailable', 'unknown'], not_to: ['unavailable', 'unknown'] };
+    if (it.id === 'zuhause_alarm_status') return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, ...nb }],
+      actions: [{ choose: [{ conditions: [{ condition: 'template', value_template: "{{ trigger.to_state.state | lower in ['off', 'false', 'nicht anwesend', 'abwesend'] }}" }], sequence: send('Alarmanlage', 'Alarmanlage ist scharf') }],
+        default: send('Alarmanlage', 'Alarmanlage ist unscharf') }] };
+    if (it.id === 'zuhause_zu_heiss') return { ...base, mode: 'single', triggers: [{ trigger: 'numeric_state', entity_id: it.ids, above: 35 }],
+      actions: [...send('Zu heiß!', "{{ state_attr(trigger.entity_id, 'friendly_name') }}: {{ trigger.to_state.state }} °C"), { delay: '00:30:00' }] };
+    const txt = { zuhause_alarm_ausgeloest: ['Alarm!', 'Alarm ausgelöst!'], zuhause_haustuer: ['Haustür', 'Haustür auf'], zuhause_carportlicht: ['Carportlicht', 'Carportlicht an'], zuhause_wasser: ['Wasser im Keller', 'Wasser im Keller!'] }[it.id];
+    return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true', 'ausgelöst'], not_from: ['unavailable', 'unknown'] }], actions: send(...txt) };
+  }
+  async _notifAction(what) {
+    const h = this._hass, plan = this._notifPlan();
+    if (!plan.phones.length) { this._notifMsg = 'Kein Handy mit der Home-Assistant-App gefunden.'; this._notifSig = null; this._renderNotif(); return; }
+    if (what === 'test') {
+      plan.phones.forEach(p => h.callService('notify', p, { title: 'Zuhause', message: 'Testmeldung vom Dashboard' }));
+      this._notifMsg = 'Testmeldung gesendet.';
+    } else {
+      let ok = 0, fail = 0;
+      for (const it of plan.items) {
+        if (!it.ids.length) continue;
+        try { await h.callApi('POST', 'config/automation/config/' + it.id, this._notifCfg(it, plan.phones)); ok++; } catch (e) { fail++; }
+      }
+      this._notifMsg = fail ? `${ok} eingerichtet, ${fail} fehlgeschlagen.` : `✓ ${ok} Meldungen eingerichtet.`;
+    }
+    this._notifSig = null; this._renderNotif();
+  }
+  _renderNotif() {
+    const k = this._k.notif; if (!k) return;
+    const admin = this._hass.user && this._hass.user.is_admin;
+    if (!this._arrange || !admin) { if (k.innerHTML) { k.innerHTML = ''; this._notifSig = null; } return; }
+    const plan = this._notifPlan();
+    const autoIds = Object.values(this._hass.states).filter(x => x.entity_id.startsWith('automation.') && x.attributes.id).reduce((m, x) => (m[x.attributes.id] = x.state, m), {});
+    const sig = JSON.stringify([plan, autoIds, this._notifMsg]);
+    if (sig === this._notifSig) return; this._notifSig = sig;
+    const ph = plan.phones.map(p => p.replace('mobile_app_', '').replace(/_/g, ' ')).join(', ') || 'keins gefunden';
+    k.innerHTML = `<div class="sect">Handy-Meldungen</div><p class="sub" style="margin:0 0 6px">Kommen über die Home-Assistant-App an: ${ph}</p>`
+      + plan.items.map(it => `<div class="row"><div class="txt"><b>${it.name}</b><div class="s" style="color:var(--muted);font-size:12px">${!it.ids.length ? 'Gerät nicht gefunden' : autoIds[it.id] === 'on' ? '✓ aktiv' : autoIds[it.id] ? 'ausgeschaltet' : 'noch nicht eingerichtet'}</div></div></div>`).join('')
+      + `<div style="display:flex;gap:8px;margin-top:8px"><button class="btn" data-notif="setup">Einrichten</button><button class="btn" data-notif="test">Testmeldung</button></div>`
+      + (this._notifMsg ? `<p class="sub" style="margin-top:6px">${this._notifMsg}</p>` : '');
+  }
+
   _update() {
     const c = this._cfg, k = this._k;
     const h = new Date().getHours();
     this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
+    this._renderNotif();
     // Begrüßung mit dem Namen des angemeldeten Benutzers
     this._set('uname', (this._hass.user && this._hass.user.name) || c.name);
 
