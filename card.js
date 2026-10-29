@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.13.3';
+const VERSION = '2.13.4';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1142,7 +1142,8 @@ class ZuhauseCard extends HTMLElement {
     const s = Object.values(h.states).find(x => {
       const e = h.entities && h.entities[x.entity_id];
       return e && e.platform === 'homematicip_local' && /(^|\s)anwesenheit$/i.test((x.attributes.friendly_name || '').trim());
-    });
+    }) || Object.values(h.states).find(x => /^(sensor|binary_sensor|select|switch|input_select|input_boolean)\./.test(x.entity_id)
+      && (/(^|_)anwesenheit$/i.test(x.entity_id) || /(^|\s)anwesenheit$/i.test((x.attributes.friendly_name || '').trim())));
     return s ? s.entity_id : null;
   }
   _armed(a) {
