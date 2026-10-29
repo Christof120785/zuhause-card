@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.15.1';
+const VERSION = '2.16.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -21,9 +21,12 @@ if (!window.__zuhauseUpd) {
 
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
-  energy: ['Energiefluss', 7, 1], wb: ['Wallbox', 5, 1], sec: ['Sicherheit', 4, 1], home: ['Räume', 8, 2],
+  energy: ['Energie & Wallbox', 8, 1], sec: ['Sicherheit', 4, 1], home: ['Räume', 8, 2],
   cams: ['Kameras', 4, 1], wx: ['Wetter', 8, 1], waste: ['Müllabfuhr', 4, 1], hist: ['Energiebilanz', 12, 2]
 };
+
+// Haus-Bild für die Energie-Kachel (liegt im Repo)
+const HAUS = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/haus-energie.webp';
 
 const DEFAULTS = {
   name: '',
@@ -150,12 +153,17 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .hero .cf button{background:rgba(255,255,255,.16);color:var(--hero-fg)}.hero .cf .y{background:#c83a3a}
 @media(max-width:520px){.hr{width:100%;justify-content:space-between}.hero .alarm{flex:1;min-width:0}}
 /* energy */
-.scene{width:100%;height:auto;max-height:230px;display:block;margin:0 auto 6px}
-.dash{stroke-dasharray:4 6;animation:fl 1.4s linear infinite}
-.dash.idle{animation:none;opacity:.3}
-.dash.rev{animation-direction:reverse}
-@keyframes fl{to{stroke-dashoffset:-20}}
-@media(prefers-reduced-motion:reduce){.dash{animation:none}}
+.stage{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#9faabb,#adb2be);padding:74px 0 86px;margin-bottom:2px}
+.hbox{position:relative;max-width:620px;margin:0 auto}.hbox img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+.lab{position:absolute;color:#fff;text-shadow:0 1px 3px rgba(30,40,60,.35);white-space:nowrap}
+.lab.up{bottom:calc(100% + 6px)}.lab.dn{top:calc(100% + 6px)}.lab[data-more]{cursor:pointer}
+.lab .t{font-size:13px;opacity:.92}.lab .v{font-family:var(--display);font-size:22px;font-weight:700;line-height:1.15}
+.lab .v small{font-size:13px;font-weight:600;margin-left:3px}.lab .s{font-size:12.5px;opacity:.95}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;transition:opacity .3s}
+.dot.idle{opacity:.35}
+@media(max-width:520px){.lab .v{font-size:18px}.lab .v small{font-size:12px}}
+.carrow{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13.5px;color:var(--muted);cursor:pointer}.carrow b{color:var(--fg)}
+.cbar{flex:1;height:7px;border-radius:9px;background:var(--tile);overflow:hidden;min-width:40px}.cbar i{display:block;height:100%;width:0;background:var(--grid);border-radius:9px}
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 @media(max-width:420px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tile{border-radius:14px;padding:10px;background:var(--tile);min-width:0}
@@ -397,47 +405,16 @@ class ZuhauseCard extends HTMLElement {
       </section>
 
       <section class="card energy" data-sec="energy">
-        <div class="eyebrow"><span>Energie</span><span>● Live</span></div>
-        <h2>Dein Energiefluss</h2><p class="sub" data-k="esub"></p>
-        <svg class="scene" viewBox="0 0 400 190" role="img" aria-label="Energiefluss">
-          <g fill="none" stroke-width="2" stroke-linecap="round">
-            <path data-k="lpv" class="dash" d="M70 58 C110 58 120 80 130 92" stroke="var(--sun)"/>
-            <path data-k="lgrid" class="dash" d="M288 112 C300 100 312 76 322 66" stroke="var(--grid)"/>
-            <path data-k="lbat" class="dash" d="M130 150 C115 160 105 158 100 154" stroke="var(--batt)"/>
-            <path data-k="lwb" class="dash" d="M288 150 C300 158 306 158 314 154" stroke="var(--house)"/>
-          </g>
-          <circle cx="55" cy="55" r="13" fill="var(--sun)"/>
-          <g stroke="var(--sun)" stroke-width="2" stroke-linecap="round"><path d="M55 32v6M55 72v6M32 55h6M72 55h6M39 39l4 4M67 67l4 4M39 71l4-4M67 43l4-4"/></g>
-          <text x="55" y="96" text-anchor="middle" font-size="10" fill="var(--muted)">Photovoltaik</text>
-          <defs><clipPath id="hc"><rect x="128" y="62" width="160" height="104" rx="14"/></clipPath></defs>
-          <image href="${c.images}haus.webp" x="128" y="62" width="160" height="104" preserveAspectRatio="xMidYMid slice" clip-path="url(#hc)"/>
-          <image href="${c.images}anker.webp" x="34" y="132" width="66" height="39"/>
-          <text x="67" y="182" text-anchor="middle" font-size="10" fill="var(--muted)">Speicher</text>
-          <rect x="320" y="38" width="32" height="32" rx="9" fill="var(--grid-soft)"/>
-          <path d="M336 44 l-7 20 M336 44 l7 20 M330 52 h12 M328 58 h16" stroke="var(--grid)" stroke-width="1.6" fill="none"/>
-          <text x="336" y="86" text-anchor="middle" font-size="10" fill="var(--muted)">Stromnetz</text>
-          <image href="${c.images}wallbox.webp" x="314" y="130" width="40" height="40"/>
-          <text x="334" y="182" text-anchor="middle" font-size="10" fill="var(--muted)">Wallbox</text>
-        </svg>
-        <div class="tiles">
-          <div class="tile t-sun" data-more="${c.pv}"><div class="l">Photovoltaik</div><div class="v num"><span data-k="vpv">–</span><small>kW</small></div><div class="s">SMA</div></div>
-          <div class="tile t-house"><div class="l">Hausverbrauch</div><div class="v num"><span data-k="vhouse">–</span><small>kW</small></div><div class="s">ohne Wallbox</div></div>
-          <div class="tile t-grid" data-more="${c.grid_in}"><div class="l">Netz</div><div class="v num"><span data-k="vgrid">–</span><small>kW</small></div><div class="s" data-k="sgrid"></div></div>
-          <div class="tile t-batt"><div class="l">Speicher</div><div class="v num"><span data-k="vbat">–</span><small>%</small></div><div class="s" data-k="sbat"></div></div>
-        </div>
-        <div class="foot"><span>Heute erzeugt <b class="num" data-k="today">–</b></span><span>Autarkie heute <b class="num" data-k="aut">–</b></span></div>
-      </section>
-
-      <section class="card wb" data-sec="wb">
-        <div class="eyebrow"><span>Wallbox</span><span>SMA EV Charger</span></div>
-        <h2 data-k="wbh">Wallbox</h2><p class="sub" data-k="wbs"></p>
-        <div class="wbpics"><div class="pic carpic"><img src="${c.images}auto.webp" alt="Auto"></div><div class="pic wbpic"><img src="${c.images}wallbox.webp" alt="Wallbox"></div></div>
-        <div class="foot" style="margin:0"><span>Akku Auto</span><span class="num" data-k="csoc">–</span></div>
-        <div class="prog"><i data-k="cbar" style="width:0;background:var(--grid)"></i></div>
-        <div class="wbt">
-          <div class="tile" data-more="${c.wallbox}"><div class="l">Ladeleistung</div><div class="v num"><span data-k="wbp">–</span><small>kW</small></div></div>
-          <div class="tile"><div class="l" data-k="wbel">Heute geladen</div><div class="v num"><span data-k="wbtoday">–</span><small>kWh</small></div></div>
-        </div>
+        <div class="eyebrow"><span>Energie &amp; Wallbox</span><span>● Live</span></div>
+        <h2 data-k="eh">Dein Energiefluss</h2><p class="sub"><span data-k="esub"></span> · Autarkie heute <b class="num" data-k="aut">–</b></p>
+        <div class="stage"><div class="hbox">
+          <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
+          <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
+          <div class="lab up" style="left:64%"><div class="t"><span class="dot" style="background:#fff"></span>Haus</div><div class="v num"><span data-k="vhouse">–</span><small data-k="uhouse">kW</small></div><div class="s" data-k="shouse"></div></div>
+          <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span><small data-k="pbat"></small></div><div class="s" data-k="sbat"></div></div>
+          <div class="lab dn" style="left:66%" data-more="${c.grid_in}"><div class="t"><span class="dot" data-k="dgrid" style="background:var(--grid)"></span>Netz</div><div class="v num"><span data-k="vgrid">–</span><small data-k="ugrid">kW</small></div><div class="s" data-k="sgrid"></div></div>
+        </div></div>
+        <div class="carrow" data-more="${c.wallbox}"><span>Auto <b class="num" data-k="csoc">–</b></span><div class="cbar"><i data-k="cbar"></i></div><span class="num">⚡ <span data-k="wbp">–</span> kW · <b data-k="wbtoday">–</b> <b>kWh</b></span></div>
         <div data-k="wbmode"></div>
       </section>
 
@@ -1342,7 +1319,7 @@ class ZuhauseCard extends HTMLElement {
     if (!s) return false;
     let v = parseFloat(s.state); if (isNaN(v)) return false;
     if ((s.attributes.unit_of_measurement || '').toLowerCase() === 'wh') v /= 1000;
-    this._set('wbel', 'Dieser Ladevorgang'); this._set('wbtoday', de(v, 1));
+    this._set('wbtoday', de(v, 1));
     return true;
   }
   // Nach dem Abstecken automatisch zurück auf PV-Laden (Automation in Home Assistant, einmalig angelegt)
@@ -1420,19 +1397,23 @@ class ZuhauseCard extends HTMLElement {
     const grid = gin - gout;
     const batP = c.batteries.reduce((a, b) => a + (this._kw(b.power) || 0), 0); // positiv = lädt
     const house = Math.max(0, (pv || 0) + grid - wb - batP);
-    this._set('vpv', pv === null ? '–' : de(pv, 2));
-    this._set('vhouse', de(house, 2));
-    this._set('vgrid', de(grid, 2));
+    // Unter 1 kW in Watt, sonst kW mit einer Stelle
+    const pw = (key, v) => { if (v === null) { this._set('v' + key, '–'); return; } const w = Math.abs(v) < 1; this._set('v' + key, w ? Math.round(v * 1000) : de(v, 1)); this._set('u' + key, w ? 'W' : 'kW'); };
+    pw('pv', pv);
+    pw('house', house + wb);
+    this._set('shouse', wb > 0.05 ? 'inkl. Wallbox' : 'Verbrauch');
+    pw('grid', Math.abs(grid));
     this._set('sgrid', grid < -0.01 ? 'Einspeisung' : grid > 0.01 ? 'Bezug' : 'ausgeglichen');
-    this._set('esub', (pv || 0) > 0.05
-      ? (grid < 0 ? 'Die Sonne liefert mehr, als du gerade brauchst.' : 'Die Sonne liefert gerade Energie.')
-      : 'Gerade kommt kein Sonnenstrom, du beziehst aus dem Netz.');
-    k.lpv.classList.toggle('idle', !((pv || 0) > 0.05));
-    k.lgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
-    k.lgrid.classList.toggle('rev', grid > 0); // Bezug: vom Netz zum Haus
-    k.lbat.classList.toggle('rev', batP < 0); // Entladen: vom Speicher zum Haus
-    k.lwb.classList.toggle('idle', wb < 0.05);
-    k.lbat.classList.toggle('idle', Math.abs(batP) < 0.02);
+    // Woher der Strom gerade kommt
+    const src = [grid > 0.05 && 'Netz', batP < -0.02 && 'Speicher', (pv || 0) > 0.05 && 'Sonnen'].filter(Boolean);
+    const srcTxt = src.length ? 'Mit ' + (src.length > 1 ? src.slice(0, -1).map(x => x + '-').join(', ') + ' und ' + src[src.length - 1] : src[0]) + 'strom' : '';
+    this._set('eh', wb > 0.05 ? 'Auto lädt' : 'Dein Energiefluss');
+    this._set('esub', wb > 0.05 ? (srcTxt || 'Wallbox aktiv')
+      : (pv || 0) > 0.05 ? (grid < 0 ? 'Die Sonne liefert mehr, als du brauchst' : 'Die Sonne liefert gerade Energie')
+      : 'Gerade kein Sonnenstrom');
+    k.dpv.classList.toggle('idle', !((pv || 0) > 0.05));
+    k.dgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
+    k.dbat.classList.toggle('idle', Math.abs(batP) < 0.02);
 
     // Batterien
     const socs = [];
@@ -1446,8 +1427,9 @@ class ZuhauseCard extends HTMLElement {
         this._set('bsub' + i, p === null ? '' : p > 0.02 ? `lädt ${de(p, 1)} kW` : p < -0.02 ? `entlädt ${de(-p, 1)} kW` : 'Ruhe');
       }
     });
-    this._set('vbat', socs.length ? Math.round(socs.reduce((a, b) => a + b, 0) / socs.length) : '–');
-    this._set('sbat', socs.length ? 'Anker + Marstek' : 'noch nicht verbunden');
+    this._set('vbat', socs.length ? Math.round(socs.reduce((a, b) => a + b, 0) / socs.length) + ' %' : '–');
+    this._set('pbat', Math.abs(batP) >= 0.02 ? `· ${de(Math.abs(batP), 1)} kW` : '');
+    this._set('sbat', !socs.length ? 'noch nicht verbunden' : batP > 0.02 ? '↓ lädt' : batP < -0.02 ? '↑ entlädt' : 'Ruhe');
     this._set('bsub', socs.length ? 'Ladestand deiner Speicher' : 'Vorbereitet, Anbindung folgt');
 
     // Wallbox und Auto
@@ -1455,8 +1437,6 @@ class ZuhauseCard extends HTMLElement {
     this._set('csoc', soc === null ? '–' : `${Math.round(soc)} %`);
     k.cbar.style.width = soc === null ? '0' : `${soc}%`;
     this._set('wbp', de(wb, 1));
-    this._set('wbh', wb > 0.05 ? 'Auto lädt' : 'Wallbox bereit');
-    this._set('wbs', wb > 0.05 ? ((pv || 0) > wb ? 'Mit Sonnenstrom' : 'Mit Netz- und Sonnenstrom') : 'Gerade kein Ladevorgang');
     this._renderWbMode();
 
     // Sicherheit (ohne ausgeblendete Kontakte)
