@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.13.2';
+const VERSION = '2.13.3';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1252,7 +1252,8 @@ class ZuhauseCard extends HTMLElement {
     const door = pick(['switch'], /haust(ü|ue)r( 1)?$/i, /optisch|sperr/i);
     const carport = pick(['switch', 'light'], /carportlicht( 1)?$/i, /gesperrt|sperr|dauerhaft/i);
     const water = st.filter(x => hm(x) && dom(x) === 'binary_sensor' && /wasser/i.test(nm(x)));
-    const temps = st.filter(x => hm(x) && dom(x) === 'sensor' && x.attributes.device_class === 'temperature' && !/au(ß|ss)en|garten|carport|terrasse/i.test(nm(x)));
+    // wie in der CCU: Raumtemperatur der Thermostate, nicht Heizungs- oder Vorlauffühler
+    const temps = st.filter(x => hm(x) && dom(x) === 'climate' && x.attributes.current_temperature != null && !/au(ß|ss)en|garten|carport|terrasse/i.test(nm(x)));
     return { phones, items: [
       { id: 'zuhause_alarm_status', name: 'Alarmanlage scharf / unscharf', ids: pres ? [pres] : [] },
       { id: 'zuhause_alarm_ausgeloest', name: 'Alarm ausgelöst', ids: alarm ? [alarm.entity_id] : [], loud: true },
@@ -1270,8 +1271,8 @@ class ZuhauseCard extends HTMLElement {
     if (it.id === 'zuhause_alarm_status') return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, ...nb }],
       actions: [{ choose: [{ conditions: [{ condition: 'template', value_template: "{{ trigger.to_state.state | lower in ['off', 'false', 'nicht anwesend', 'abwesend'] }}" }], sequence: send('Alarmanlage', 'Alarmanlage ist scharf') }],
         default: send('Alarmanlage', 'Alarmanlage ist unscharf') }] };
-    if (it.id === 'zuhause_zu_heiss') return { ...base, mode: 'single', triggers: [{ trigger: 'numeric_state', entity_id: it.ids, above: 35 }],
-      actions: [...send('Zu heiß!', "{{ state_attr(trigger.entity_id, 'friendly_name') }}: {{ trigger.to_state.state }} °C"), { delay: '00:30:00' }] };
+    if (it.id === 'zuhause_zu_heiss') return { ...base, mode: 'single', triggers: [{ trigger: 'numeric_state', entity_id: it.ids, attribute: 'current_temperature', above: 35 }],
+      actions: [...send('Zu heiß!', "{{ state_attr(trigger.entity_id, 'friendly_name') }}: {{ state_attr(trigger.entity_id, 'current_temperature') }} °C"), { delay: '00:30:00' }] };
     const txt = { zuhause_alarm_ausgeloest: ['Alarm!', 'Alarm ausgelöst!'], zuhause_haustuer: ['Haustür', 'Haustür auf'], zuhause_carportlicht: ['Carportlicht', 'Carportlicht an'], zuhause_wasser: ['Wasser im Keller', 'Wasser im Keller!'] }[it.id];
     return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true', 'ausgelöst'], not_from: ['unavailable', 'unknown'] }], actions: send(...txt) };
   }
