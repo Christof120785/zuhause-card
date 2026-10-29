@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.13.0';
+const VERSION = '2.13.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1247,8 +1247,8 @@ class ZuhauseCard extends HTMLElement {
     const dom = x => x.entity_id.split('.')[0];
     const pick = (doms, re, not) => st.find(x => hm(x) && doms.includes(dom(x)) && re.test(nm(x)) && !(not && not.test(nm(x))));
     const phones = Object.keys((h.services && h.services.notify) || {}).filter(x => x.startsWith('mobile_app_'));
-    const pres = this._presence();
-    const alarm = pick(['binary_sensor', 'sensor', 'switch'], /(^|\s)(SV\s+)?alarm$/i);
+    const ae = this._alarmEnt(), pres = (ae && ae.pres) || this._presence();
+    const alarm = pick(['binary_sensor', 'sensor', 'switch', 'select'], /(^|\s)(SV\s+)?alarm(meldung|zustand|status)?$/i, /anlage/i);
     const door = pick(['switch'], /haust(ü|ue)r( 1)?$/i, /optisch|sperr/i);
     const carport = pick(['switch', 'light'], /carportlicht( 1)?$/i, /gesperrt|sperr|dauerhaft/i);
     const water = st.filter(x => hm(x) && dom(x) === 'binary_sensor' && /wasser/i.test(nm(x)));
