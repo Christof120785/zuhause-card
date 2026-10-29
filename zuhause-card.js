@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.11.1';
+const VERSION = '2.11.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1423,6 +1423,8 @@ class ZuhauseCard extends HTMLElement {
         }
       });
       (prefs.device_consumption || []).forEach(d => { if (/ladestation|smaev|wallbox/i.test(d.stat_consumption)) wbId = d.stat_consumption; });
+      // jeden Zähler nur einmal zählen (neue und alte Form der Energie-Einstellungen können denselben Zähler doppelt nennen)
+      [pvIds, inIds, outIds].forEach(l => l.splice(0, l.length, ...new Set(l.filter(Boolean))));
       const ids = [...pvIds, ...inIds, ...outIds, wbId].filter(Boolean);
       if (!ids.length) { this._k.hist.innerHTML = '<p class="sub">Keine Energie-Konfiguration gefunden.</p>'; return; }
       const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 6);
