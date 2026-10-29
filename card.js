@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.11.2';
+const VERSION = '2.12.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -338,6 +338,21 @@ class ZuhauseCard extends HTMLElement {
     if (!this._fcSub && hass.connection && this._cfg.weather && hass.states[this._cfg.weather]) this._subForecast();
     if (!this._wasteT || Date.now() - this._wasteT > 30 * 60 * 1000) { this._wasteT = Date.now(); this._loadWaste(); }
     if (!this._histT || Date.now() - this._histT > 15 * 60 * 1000) { this._histT = Date.now(); this._loadHistory(); }
+    if (!this._ccuT || Date.now() - this._ccuT > 60 * 1000) this._refreshCcu();
+    if (!this._visL) { this._visL = true; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this._refreshCcu(); }); }
+  }
+
+  // Systemvariablen (z. B. Alarmstatus "Anwesenheit") frisch von der CCU holen: beim Öffnen und danach jede Minute.
+  // So stimmt der Status auch, wenn er über CloudMatic, eine Fernbedienung oder ein anderes Handy geändert wurde.
+  async _refreshCcu() {
+    const h = this._hass; if (!h || document.visibilityState === 'hidden') return;
+    this._ccuT = Date.now();
+    const svc = h.services && h.services.homematicip_local;
+    if (!svc || !svc.fetch_system_variables) return;
+    if (!this._hmEntry) {
+      try { const es = await h.callWS({ type: 'config_entries/get', domain: 'homematicip_local' }); this._hmEntry = es && es[0] && es[0].entry_id; } catch (e) { /* kein Zugriff */ }
+    }
+    if (this._hmEntry) h.callService('homematicip_local', 'fetch_system_variables', { entry_id: this._hmEntry }).catch(() => {});
   }
 
   _s(id) { return id && this._hass.states[id]; }
