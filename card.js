@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.14.2';
+const VERSION = '2.15.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -178,6 +178,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 /* wallbox */
 .wbpics{display:grid;grid-template-columns:3fr 1fr;gap:8px;margin:4px 0 8px}
 .carpic img{width:86%}.wbpic img{width:80%}
+.mini{all:unset;cursor:pointer;margin-left:8px;font-size:12px;color:var(--grid);padding:4px 8px;border-radius:8px;background:var(--tile)}
 .segs{display:flex;gap:8px;margin-top:10px}
 .seg{all:unset;cursor:pointer;flex:1;text-align:center;padding:10px 8px;border-radius:12px;background:var(--tile);font-size:13.5px;font-weight:600;color:var(--fg)}
 .seg.on{background:var(--sun);color:#fff}
@@ -383,7 +384,7 @@ class ZuhauseCard extends HTMLElement {
     const firstPic = c.batteries.find(b => b.img);
     const cams = this._cams.map((m, i) => `<div class="cam" data-cam="${i}"><div class="view" data-k="cv${i}">${svg('cam')}</div>
       <div class="meta"><b>${m.name}</b><span data-k="cs${i}">${m.brand}</span></div></div>`).join('');
-    const contacts = c.contacts.map((k, i) => `<div class="row"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span></div>`).join('');
+    const contacts = c.contacts.map((k, i) => `<div class="row" data-k="crow${i}"><div class="txt" data-more="${k.entity}"><b>${k.name}</b></div><span class="pill" data-k="ct${i}"></span><button class="mini" data-chide="${k.entity}" data-k="chb${i}" hidden></button></div>`).join('');
 
     root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="grid">
       <section class="card hero"><span class="ver">v${VERSION}${window.__zuhauseSrc === 'lokal' ? ' · lokal' : ''}</span>
@@ -525,6 +526,8 @@ class ZuhauseCard extends HTMLElement {
     root.addEventListener('click', e => {
       if (e.target.closest('input,select')) return;
       if (this._roomClick(e)) return;
+      const ch = e.target.closest('[data-chide]');
+      if (ch && this._lay) { const id = ch.dataset.chide, l = this._lay.hc = this._lay.hc || []; const i = l.indexOf(id); if (i < 0) l.push(id); else l.splice(i, 1); this._save(); this._update(); return; }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return; }
       const nb = e.target.closest('[data-notif]');
@@ -585,6 +588,12 @@ class ZuhauseCard extends HTMLElement {
       const r = await this._hass.callWS({ type: 'frontend/get_user_data', key: 'zuhause-card' });
       if (r && r.value) Object.assign(this._lay, r.value);
     } catch (e) { /* ältere Versionen: Standard */ }
+    // ausgeblendete Kontakte (Sicherheit); "Fenster Bad unten" ist vorerst abgeschaltet und startet ausgeblendet
+    if (!this._lay.hcInit) {
+      this._lay.hcInit = true;
+      this._lay.hc = (this._lay.hc || []).concat((this._cfg.contacts || []).filter(x => /fenster bad unten/i.test(x.name)).map(x => x.entity));
+      this._save();
+    }
     this._roomSig = null;
     if (this._built) this._update();
   }
@@ -995,7 +1004,7 @@ class ZuhauseCard extends HTMLElement {
     const room = id => rooms.find(r => r.id === id);
     const done = () => { this._roomSig = null; this._busy = 0; this._renderRooms(); return true; };
     if (!this._lay && (d.mv || d.hide || d.boost || d.q || d.tmv || d.thide)) return true;
-    if (t.hasAttribute('data-arrange')) { this._arrange = !this._arrange; this._renderNotif(); return done(); }
+    if (t.hasAttribute('data-arrange')) { this._arrange = !this._arrange; this._renderNotif(); this._update(); return done(); }
     if (d.tmv || d.thide) {
       const T = this._tiles();
       if (d.tmv) {
@@ -1443,8 +1452,15 @@ class ZuhauseCard extends HTMLElement {
     this._set('wbs', wb > 0.05 ? ((pv || 0) > wb ? 'Mit Sonnenstrom' : 'Mit Netz- und Sonnenstrom') : 'Gerade kein Ladevorgang');
     this._renderWbMode();
 
-    // Sicherheit
-    const open = c.contacts.filter(x => { const s = this._s(x.entity); return s && s.state === 'on'; });
+    // Sicherheit (ohne ausgeblendete Kontakte)
+    const hc = (this._lay && this._lay.hc) || [], arr = !!this._arrange;
+    c.contacts.forEach((x, i) => {
+      const hid = hc.includes(x.entity), row = k['crow' + i], b = k['chb' + i];
+      if (row) row.hidden = hid && !arr;
+      if (b) { b.hidden = !arr; b.textContent = hid ? 'einblenden' : 'ausblenden'; }
+    });
+    const cs = c.contacts.filter(x => !hc.includes(x.entity));
+    const open = cs.filter(x => { const s = this._s(x.entity); return s && s.state === 'on'; });
     c.contacts.forEach((x, i) => {
       const s = this._s(x.entity), e = k['ct' + i];
       if (!s) { e.className = 'pill off'; this._set('ct' + i, 'nicht gefunden'); }
@@ -1452,8 +1468,8 @@ class ZuhauseCard extends HTMLElement {
       else if (s.state === 'on') { e.className = 'pill warn'; this._set('ct' + i, 'offen'); }
       else { e.className = 'pill off'; this._set('ct' + i, 'zu'); }
     });
-    const lost = c.contacts.filter(x => { const s = this._s(x.entity); return s && (s.state === 'unavailable' || s.state === 'unknown'); });
-    const known = c.contacts.filter(x => this._s(x.entity)).length - lost.length;
+    const lost = cs.filter(x => { const s = this._s(x.entity); return s && (s.state === 'unavailable' || s.state === 'unknown'); });
+    const known = cs.filter(x => this._s(x.entity)).length - lost.length;
     this._set('nopen', open.length);
     this._set('nclosed', known - open.length);
     k.shield.classList.toggle('alert', open.length > 0 || lost.length > 0);
