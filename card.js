@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.14.1';
+const VERSION = '2.14.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1329,6 +1329,24 @@ class ZuhauseCard extends HTMLElement {
     this._set('wbel', 'Dieser Ladevorgang'); this._set('wbtoday', de(v, 1));
     return true;
   }
+  // Nach dem Abstecken automatisch zurück auf PV-Laden (Automation in Home Assistant, einmalig angelegt)
+  _wbAuto(sel, pv) {
+    const h = this._hass;
+    if (this._wbAutoT || !pv || !(h.user && h.user.is_admin)) return;
+    const st = this._wbEnt(['sensor'], /status ladevorgang|charging session status/i);
+    if (!st) return;
+    this._wbAutoT = true;
+    const id = 'zuhause_wallbox_pv_nach_abstecken';
+    if (Object.values(h.states).some(x => x.entity_id.startsWith('automation.') && x.attributes.id === id)) return;
+    h.callApi('POST', 'config/automation/config/' + id, {
+      id, alias: 'Zuhause: Wallbox nach dem Abstecken auf PV-Laden', description: 'Angelegt vom Zuhause-Dashboard', mode: 'single',
+      triggers: [{ trigger: 'state', entity_id: st.entity_id, not_from: ['unavailable', 'unknown'] }],
+      conditions: [{ condition: 'template', value_template: "{% set s = trigger.to_state.state | lower %}{{ ('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s }}" },
+        { condition: 'template', value_template: `{{ states('${sel.entity_id}') != '${pv}' }}` }],
+      actions: [{ action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: pv } }],
+    }).catch(() => { this._wbAutoT = false; });
+  }
+
   async _setWbMode(eid, opt) {
     const h = this._hass;
     if (/vorgabe|setpoint/i.test(opt)) {
@@ -1353,6 +1371,7 @@ class ZuhauseCard extends HTMLElement {
     const pv = opts.find(o => /optimiert|optimized/i.test(o));
     // ohne eigene Option "Schnellladen": "Laden mit Vorgabe" mit so viel Energie in so kurzer Zeit, dass die Wallbox voll lädt
     const fast = opts.find(o => /schnell|fast/i.test(o)) || opts.find(o => /vorgabe|setpoint/i.test(o));
+    this._wbAuto(sel, pv);
     const sw = this._wbEnt(['sensor'], /drehschalter|rotary switch/i);
     const locked = sw && /schnell|fast/i.test(sw.state);
     const btn = (o, label) => o ? `<button class="seg${cur === o ? ' on' : ''}" data-wbmode="${sel.entity_id}|${o}" ${locked ? 'disabled' : ''}>${label}</button>` : '';
