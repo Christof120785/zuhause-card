@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.16.0';
+const VERSION = '2.17.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -44,6 +44,9 @@ const TILES = {
 
 // Haus-Bild für die Energie-Kachel (liegt im Repo)
 const HAUS = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/haus-energie.webp';
+
+// Farben für Lampen: Name, Farbton
+const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
 
 const DEFAULTS = {
   name: '',
@@ -178,6 +181,12 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .lab .v small{font-size:13px;font-weight:600;margin-left:3px}.lab .s{font-size:12.5px;opacity:.95}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;transition:opacity .3s}
 .dot.idle{opacity:.35}
+/* laufende Punkte: Richtung = wohin der Strom fließt (Pfad zeigt ins Haus, .rev = raus) */
+.flow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.flow path{fill:none;stroke-width:6;stroke-linecap:round;stroke-dasharray:0 14;vector-effect:non-scaling-stroke;animation:fl2 .8s linear infinite;filter:drop-shadow(0 0 2px #fff);transition:opacity .3s}
+.flow path.rev{animation-direction:reverse}.flow path.idle{opacity:0}
+@keyframes fl2{to{stroke-dashoffset:-28}}
+@media(prefers-reduced-motion:reduce){.flow path{animation:none}}
 @media(max-width:520px){.lab .v{font-size:18px}.lab .v small{font-size:12px}}
 .carrow{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13.5px;color:var(--muted);cursor:pointer}.carrow b{color:var(--fg)}
 .cbar{flex:1;height:7px;border-radius:9px;background:var(--tile);overflow:hidden;min-width:40px}.cbar i{display:block;height:100%;width:0;background:var(--grid);border-radius:9px}
@@ -243,6 +252,11 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .stats.two{grid-template-columns:repeat(2,1fr)}
 .dim{display:block;width:100%;margin:4px 0 0;accent-color:var(--sun)}
 .dim[hidden]{display:none}
+.cols{display:flex;gap:9px;align-items:center;flex-wrap:wrap;width:100%;margin:8px 0 2px}
+.cdot{all:unset;cursor:pointer;width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.cdot.on{outline:2px solid var(--fg);outline-offset:2px}
+.cdot.cw{background:linear-gradient(135deg,#fff,#ffe3b8)}
+.cmore{all:unset;cursor:pointer;margin-left:auto;font-size:12px;padding:5px 11px;border-radius:99px;background:var(--tile);color:var(--fg)}
 .row .txt[data-more]{cursor:pointer}
 .scn{border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
 .scl{font-size:11px;color:var(--muted);margin-bottom:6px}
@@ -426,6 +440,11 @@ class ZuhauseCard extends HTMLElement {
         <h2 data-k="eh">Dein Energiefluss</h2><p class="sub"><span data-k="esub"></span> · Autarkie heute <b class="num" data-k="aut">–</b></p>
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
+          <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
+            <path data-k="fpv" class="idle" d="M255.5 0V153" stroke="var(--sun)"/>
+            <path data-k="fbat" class="idle" d="M564 777V722" stroke="var(--batt)"/>
+            <path data-k="fgrid" class="idle" d="M795 777V647" stroke="var(--grid)"/>
+          </svg>
           <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
           <div class="lab up" style="left:64%"><div class="t"><span class="dot" style="background:#fff"></span>Haus</div><div class="v num"><span data-k="vhouse">–</span><small data-k="uhouse">kW</small></div><div class="s" data-k="shouse"></div></div>
           <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span><small data-k="pbat"></small></div><div class="s" data-k="sbat"></div></div>
@@ -547,6 +566,8 @@ class ZuhauseCard extends HTMLElement {
         } else if (ids.length) this._hass.callService('homeassistant', 'toggle', { entity_id: ids[0] });
         return;
       }
+      const lc = e.target.closest('[data-lcol]');
+      if (lc) { const [eid, v] = lc.dataset.lcol.split('|'); this._setColor(eid, v); return; }
       const sc = e.target.closest('[data-scene]');
       if (sc) { this._hass.callService('scene', 'turn_on', { entity_id: sc.dataset.scene }); return; }
       const cam = e.target.closest('[data-cam]');
@@ -775,6 +796,25 @@ class ZuhauseCard extends HTMLElement {
     return n;
   }
   _posTxt(v) { return v <= 0 ? 'Zu' : v >= 100 ? 'Auf' : `${v} %`; }
+  // Farbauswahl für farbige Lampen: feste Farben, Weiß und "Mehr" (Farbrad von Home Assistant)
+  _colors(s, name) {
+    const m = s.attributes.supported_color_modes || [];
+    if (!m.some(x => /^(hs|xy|rgb|rgbw|rgbww)$/.test(x))) return '';
+    const hs = s.attributes.hs_color, col = /^(hs|xy|rgb|rgbw|rgbww)$/.test(s.attributes.color_mode || '') && hs && hs[1] > 40;
+    const cur = col ? LCOL.reduce((b, c, i) => { const d = Math.min(Math.abs(hs[0] - c[1]), 360 - Math.abs(hs[0] - c[1])); return d < b[0] ? [d, i] : b; }, [999, -1])[1] : -1;
+    const white = !col;
+    return `<div class="cols">${LCOL.map((c, i) => `<button class="cdot${i === cur ? ' on' : ''}" style="background:hsl(${c[1]},95%,52%)" data-lcol="${s.entity_id}|${i}" aria-label="${name} ${c[0]}"></button>`).join('')}`
+      + `<button class="cdot cw${white ? ' on' : ''}" data-lcol="${s.entity_id}|w" aria-label="${name} Weiß"></button><button class="cmore" data-more="${s.entity_id}">Mehr</button></div>`;
+  }
+  _setColor(eid, v) {
+    const s = this._s(eid); if (!s) return;
+    const m = s.attributes.supported_color_modes || [], d = { entity_id: eid };
+    if (v !== 'w') d.hs_color = [LCOL[+v][1], 100];
+    else if (m.includes('color_temp')) d.color_temp_kelvin = 2700;
+    else if (m.includes('white')) d.white = s.attributes.brightness || 255;
+    else d.hs_color = [30, 15];
+    this._hass.callService('light', 'turn_on', d);
+  }
   _pct(s) { return s.attributes.brightness != null ? Math.round(s.attributes.brightness / 2.55) : null; }
   _boosting(s) { return s.attributes.preset_mode === 'boost'; }
   _canBoost(s) { return (s.attributes.preset_modes || []).includes('boost'); }
@@ -958,7 +998,8 @@ class ZuhauseCard extends HTMLElement {
         const p = this._pct(s), dimm = (s.attributes.supported_color_modes || []).some(m => m !== 'onoff');
         const sub = s.state === 'on' ? (p != null ? `An · ${p} %` : 'An') : s.state === 'off' ? 'Aus' : 'nicht erreichbar';
         h += row('bulb', s.entity_id, this._nm(s, r), sub, tg(s),
-          dimm && s.state === 'on' ? `<input type="range" class="dim" min="1" max="100" value="${p || 100}" data-dim="${s.entity_id}" aria-label="${this._nm(s, r)} dimmen">` : '');
+          (dimm && s.state === 'on' ? `<input type="range" class="dim" min="1" max="100" value="${p || 100}" data-dim="${s.entity_id}" aria-label="${this._nm(s, r)} dimmen">` : '')
+          + (s.state === 'on' ? this._colors(s, this._nm(s, r)) : ''));
         if (s.attributes.is_hue_group) h += chips(scOf(s.attributes.friendly_name));
       });
       r.sw.forEach(s => { h += row('plug', s.entity_id, this._nm(s, r), s.state === 'on' ? 'An' : s.state === 'off' ? 'Aus' : 'nicht erreichbar', tg(s)); });
@@ -1431,6 +1472,11 @@ class ZuhauseCard extends HTMLElement {
     k.dpv.classList.toggle('idle', !((pv || 0) > 0.05));
     k.dgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
     k.dbat.classList.toggle('idle', Math.abs(batP) < 0.02);
+    k.fpv.classList.toggle('idle', !((pv || 0) > 0.05));
+    k.fbat.classList.toggle('idle', Math.abs(batP) < 0.02);
+    k.fbat.classList.toggle('rev', batP > 0); // lädt: vom Haus in den Speicher
+    k.fgrid.classList.toggle('idle', Math.abs(grid) < 0.02);
+    k.fgrid.classList.toggle('rev', grid < 0); // Einspeisung: vom Haus ins Netz
 
     // Batterien
     const socs = [];
