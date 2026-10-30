@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.23.2';
+const VERSION = '2.23.3';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1901,17 +1901,19 @@ class ZuhauseCard extends HTMLElement {
     try {
       // Apps (Add-ons): gestoppt, obwohl sie beim Start laufen sollen; ohne Watchdog als Hinweis
       const ad = await h.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' }).catch(() => null);
-      this._sysWd = new Set();
+      this._sysWd = new Set(); this._sysRen = {};
       for (const a of (ad && ad.addons) || []) {
         const info = await h.callWS({ type: 'supervisor/api', endpoint: `/addons/${a.slug}/info`, method: 'get' }).catch(() => null);
         if (!info || info.boot !== 'auto') continue;
         // Sensoren, die eine App liest (z. B. AstraMeter den Shelly), mitprüfen: fehlen sie, stürzt die App beim Start ab
+        const fix = {};
         JSON.stringify(info.options || {}).replace(/sensor\.[a-z0-9_]+/g, id => {
           const s = h.states[id];
-          if (!s) bad.push(`App „${a.name}“ liest ${id}, den gibt es nicht`);
+          if (!s) { const n = this._sysFind(id); if (n) fix[id] = n; bad.push(`App „${a.name}“ liest ${id}, den gibt es nicht${n ? ` <small>(neu: ${n})</small>` : ''}`); }
           else if (/^(unavailable|unknown)$/.test(s.state)) bad.push(`${nm(id)} (für ${a.name}): keine Werte`);
           return id;
         });
+        if (Object.keys(fix).length) { (this._sysRen = this._sysRen || {})[a.slug] = { fix, options: info.options, name: a.name }; }
         if (a.state !== 'started') bad.push(`App „${a.name}“ läuft nicht <button data-sysfix="start|${a.slug}">Starten</button>`);
         if (info.watchdog === false) { hint.push(`App „${a.name}“: Watchdog ist aus <small>(bei einem Absturz startet sie nicht neu)</small>`); (this._sysWd = this._sysWd || new Set()).add(a.slug); }
       }
@@ -1941,16 +1943,38 @@ class ZuhauseCard extends HTMLElement {
     const h = this._hass, api = (endpoint, data) => h.callWS({ type: 'supervisor/api', endpoint, method: 'post', ...(data ? { data } : {}) });
     try {
       if (what === 'start') { this._sysMsg = 'Starte …'; this._renderSys(); await api(`/addons/${arg}/start`); this._sysMsg = 'Gestartet.'; }
+      if (what === 'ren') {
+        // umbenannte Sensoren in den App-Optionen ersetzen, speichern, App neu starten
+        const r = this._sysRen[arg];
+        let js = JSON.stringify(r.options);
+        Object.entries(r.fix).forEach(([o, n]) => { js = js.split(o).join(n); });
+        this._sysMsg = 'Korrigiere …'; this._renderSys();
+        await api(`/addons/${arg}/options`, { options: JSON.parse(js) });
+        await api(`/addons/${arg}/restart`).catch(() => api(`/addons/${arg}/start`));
+        this._sysMsg = `${r.name}: Sensoren korrigiert und neu gestartet.`;
+      }
       if (what === 'wd') { for (const s of arg.split(',')) await api(`/addons/${s}/options`, { watchdog: true }); this._sysWd = new Set(); this._sysMsg = 'Watchdog ist jetzt überall an.'; }
     } catch (e) { this._sysMsg = 'Hat nicht geklappt: ' + ((e && e.message) || e); }
     this._sysT = 0; this._sysCheck(); this._renderSys();
+  }
+  // Nachfolger eines umbenannten Sensors finden, z. B. sensor.shellypro3em_x_phase_a_power -> sensor.shellypro3em_x_phase_a_leistung
+  _sysFind(id) {
+    const h = this._hass, m = id.match(/^sensor\.(.+?)_(phase_[abc]|[abc]|l[123])_(\w+)$/);
+    const pw = s => s.attributes.device_class === 'power' || /^k?W$/.test(s.attributes.unit_of_measurement || '');
+    const all = Object.values(h.states).filter(s => s.entity_id.startsWith('sensor.') && pw(s));
+    if (m) {
+      const dev = m[1], ph = m[2].replace(/^phase_/, '');
+      const c = all.filter(s => s.entity_id.includes(dev) && new RegExp(`(^|_)(phase_)?${ph}(_|$)`).test(s.entity_id.slice(7 + dev.length)) && !/apparent|schein|factor|faktor/i.test(s.entity_id));
+      if (c.length) return c.sort((a, b) => a.entity_id.length - b.entity_id.length)[0].entity_id;
+    }
+    return null;
   }
   _renderSys() {
     const k = this._k.sys; if (!k || !this._sys) return;
     const { bad, hint } = this._sys, all = [...bad, ...hint], wd = [...(this._sysWd || [])];
     if (!all.length || this._sysHide === all.join('|')) { k.hidden = true; return; }
     k.hidden = false; k.classList.toggle('ok', !bad.length);
-    k.innerHTML = `<b>⚠ Systemcheck: ${bad.length ? `${bad.length} Problem${bad.length > 1 ? 'e' : ''}` : 'nur Hinweise'}</b><button data-syshide>ausblenden</button><ul>${all.map(x => `<li>${x}</li>`).join('')}</ul>${wd.length ? `<button data-sysfix="wd|${wd.join(',')}" style="margin:6px 0 0">Watchdog bei allen einschalten</button>` : ''}${this._sysMsg ? `<div style="margin-top:6px;font-size:12px">${this._sysMsg}</div>` : ''}`;
+    k.innerHTML = `<b>⚠ Systemcheck: ${bad.length ? `${bad.length} Problem${bad.length > 1 ? 'e' : ''}` : 'nur Hinweise'}</b><button data-syshide>ausblenden</button><ul>${all.map(x => `<li>${x}</li>`).join('')}</ul>${Object.entries(this._sysRen || {}).map(([slug, r]) => `<button data-sysfix="ren|${slug}" style="margin:6px 8px 0 0">${r.name}: Sensoren korrigieren und neu starten</button>`).join('')}${wd.length ? `<button data-sysfix="wd|${wd.join(',')}" style="margin:6px 0 0">Watchdog bei allen einschalten</button>` : ''}${this._sysMsg ? `<div style="margin-top:6px;font-size:12px">${this._sysMsg}</div>` : ''}`;
   }
   // Push aufs Handy, wenn wichtige Geräte 15 Minuten keine Werte liefern (läuft in Home Assistant, auch ohne offenes Dashboard)
   _sysPush() {
