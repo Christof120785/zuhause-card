@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.24.2';
+const VERSION = '2.25.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -860,6 +860,8 @@ class ZuhauseCard extends HTMLElement {
       if (OUT.test(n) && by.__aussen) return '__aussen';
       const sy = syn[n] && Object.values(by).find(b => norm(b.name) === syn[n]);
       if (sy) return sy.id;
+      // "Flur unten" ist ein eigenes Stockwerk, kein Teil von "Flur"
+      if (/(unten|oben|keller|dg|og|eg)$/.test(n)) return '';
       const c = Object.values(by).filter(b => b.id !== a && b.id !== '__aussen' && norm(b.name).length >= 4 && n.includes(norm(b.name))
         && (n !== norm(b.name) || by[a].name.length > b.name.length));
       c.sort((x, y) => norm(y.name).length - norm(x.name).length);
@@ -1322,6 +1324,13 @@ class ZuhauseCard extends HTMLElement {
         if (s.attributes.is_hue_group) h += chips(scOf(s.attributes.friendly_name));
       });
       r.sw.forEach(s => { h += row('plug', s.entity_id, this._nm(s, r), s.state === 'on' ? 'An' : s.state === 'off' ? 'Aus' : 'nicht erreichbar', tg(s)); });
+    }
+    // Bewegung (z. B. WiZ SpaceSense) aus Belegungs-/Bewegungsmeldern des Raums
+    const mot = Object.values(this._hass.states).filter(s => /^binary_sensor\./.test(s.entity_id) && /occupancy|motion|presence/.test(s.attributes.device_class || '')
+      && this._areaOf(s.entity_id) === r.id);
+    if (mot.length) {
+      const on = mot.some(s => s.state === 'on');
+      h += `<div class="row"><div class="ico">${svg('bulb')}</div><div class="txt" data-more="${mot[0].entity_id}"><b>Bewegung</b><span>${on ? 'erkannt' : 'keine'}</span></div></div>`;
     }
     if (r.fn.length) {
       h += '<div class="sect">Funktionen</div>';
@@ -1976,9 +1985,25 @@ class ZuhauseCard extends HTMLElement {
     }).then(() => { L.sysV = 1; this._save(); }).catch(() => { this._sysPushT = false; });
   }
 
+  // WiZ-Birnen ohne Bereich einmalig dem Bereich „Flur unten“ zuordnen (Bereich wird bei Bedarf angelegt)
+  async _wizArea() {
+    const h = this._hass;
+    if (this._wizT || !(h.user && h.user.is_admin) || !h.entities || !h.devices || !h.areas) return;
+    this._wizT = true;
+    const devs = [...new Set(Object.values(h.entities).filter(e => e.platform === 'wiz' && e.entity_id.startsWith('light.') && e.device_id && !e.area_id
+      && h.devices[e.device_id] && !h.devices[e.device_id].area_id).map(e => e.device_id))];
+    if (!devs.length) return;
+    try {
+      let a = Object.values(h.areas).find(x => (x.name || '').trim().toLowerCase() === 'flur unten');
+      if (!a) a = await h.callWS({ type: 'config/area_registry/create', name: 'Flur unten', icon: 'mdi:stairs-down' });
+      for (const d of devs) await h.callWS({ type: 'config/device_registry/update', device_id: d, area_id: a.area_id });
+    } catch (e) { console.warn('zuhause-card: WiZ-Bereich', e); }
+  }
+
   _update() {
     const c = this._cfg, k = this._k;
     this._sysCheck();
+    this._wizArea();
     const h = new Date().getHours();
     this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
     this._renderNotif();
