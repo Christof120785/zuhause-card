@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.22.0';
+const VERSION = '2.22.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -33,7 +33,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 3;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 4;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -1806,6 +1806,8 @@ class ZuhauseCard extends HTMLElement {
             { trigger: 'template', value_template: `{{ ${wb} > 1500 }}`, for: { minutes: 1 }, id: 'laedt' },
             { trigger: 'template', value_template: `{{ ${wb} < 300 }}`, for: { minutes: 2 }, id: 'fertig' },
             { trigger: 'state', entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt', id: 'erlaubt' },
+            // auch jede Minute prüfen: lädt das Auto schon, wenn die Regel entsteht, gibt es keinen Wechsel, der sie auslöst
+            { trigger: 'time_pattern', minutes: '/1' },
           ],
           actions: [{ choose: [
             { conditions: [{ condition: 'template', value_template: `{{ ${wb} > 1500 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and is_state('input_boolean.zuhause_anker_pausiert', 'off') and is_state('${am}', '${mEig}') }}` }],
