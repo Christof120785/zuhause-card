@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.20.0';
+const VERSION = '2.20.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -215,6 +215,8 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .fi span{font-size:11.5px;opacity:var(--lo,1)}
 .fi.on i{background:var(--sun);color:#fff;box-shadow:0 0 0 6px rgba(239,181,68,.22),0 0 26px rgba(239,181,68,.45)}
 .fi.na{filter:grayscale(1)}
+.fi.arm i{box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 22px rgba(160,200,255,.5)}
+.fi.arm span{display:none}.fi.arm::after{content:attr(data-arm);font-size:11.5px;font-weight:600;color:#fff;opacity:var(--lo,1)}
 .hxo{position:fixed;inset:0;z-index:20;background:rgba(6,10,16,.62);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);animation:hxf .2s ease-out}
 .hxo[hidden]{display:none}
 .hxw{position:absolute;left:50%;top:50%}
@@ -1072,12 +1074,14 @@ class ZuhauseCard extends HTMLElement {
   }
   _favR() { return Math.min(300, Math.max(140, this._k.fav.clientWidth * 0.46)); }
   _favDrag(el) {
-    let x0 = null, p0 = 0, moved = false, lx = 0, lt = 0, v = 0;
+    let x0 = null, y0 = 0, p0 = 0, moved = false, lx = 0, lt = 0, v = 0, arm = null, armT = null;
+    // Schalten nur mit zweitem Tippen, damit beim Scrollen der Seite nichts aus Versehen angeht
+    const disarm = () => { clearTimeout(armT); if (arm) arm.classList.remove('arm'); arm = null; };
     const per = () => this._favR() * Math.sin(2 * Math.PI / el.children.length);
     let lp = null, long = false;
     el.addEventListener('contextmenu', e => e.preventDefault());
     el.addEventListener('pointerdown', e => {
-      x0 = lx = e.clientX; lt = e.timeStamp; p0 = this._favPos; moved = false; v = 0; long = false;
+      x0 = lx = e.clientX; y0 = e.clientY; lt = e.timeStamp; p0 = this._favPos; moved = false; v = 0; long = false;
       const b = e.target.closest && e.target.closest('.fi');
       clearTimeout(lp);
       if (b) lp = setTimeout(() => {
@@ -1092,6 +1096,7 @@ class ZuhauseCard extends HTMLElement {
     });
     el.addEventListener('pointermove', e => {
       if (x0 === null) return;
+      if (!moved && Math.abs(e.clientY - y0) > 8) { clearTimeout(lp); x0 = null; return; }
       if (!moved && Math.abs(e.clientX - x0) > 6) { moved = true; clearTimeout(lp); el.classList.add('drag'); try { el.setPointerCapture(e.pointerId); } catch (_) {} }
       if (!moved) return;
       const dt = Math.max(1, e.timeStamp - lt); v = (e.clientX - lx) / dt; lx = e.clientX; lt = e.timeStamp;
@@ -1102,14 +1107,21 @@ class ZuhauseCard extends HTMLElement {
       if (x0 === null) return;
       el.classList.remove('drag');
       if (long) { x0 = null; return; }
+      if (Math.abs(e.clientY - y0) > 8 || e.timeStamp - lt > 450 && !moved) { x0 = null; this._favLay(); return; }
       if (moved) {
+        disarm();
         this._favPos = Math.round(this._favPos - Math.max(-2, Math.min(2, v * 0.35)));
       } else {
         const b = e.target.closest && e.target.closest('.fi');
         if (b) {
           const i = [...el.children].indexOf(b), n = el.children.length, d = ((i - this._favPos) % n + n + n / 2) % n - n / 2;
-          if (Math.abs(d) < 0.5) { const fs = this._favs(), s = fs[i % fs.length].s; if (s && s.state !== 'unavailable') this._hass.callService(s.entity_id.split('.')[0], 'toggle', { entity_id: s.entity_id }); }
-          else this._favPos = Math.round(this._favPos + d);
+          if (Math.abs(d) < 0.5) {
+            const fs = this._favs(), s = fs[i % fs.length].s;
+            if (s && s.state !== 'unavailable') {
+              if (arm === b) { disarm(); this._hass.callService(s.entity_id.split('.')[0], 'toggle', { entity_id: s.entity_id }); }
+              else { disarm(); arm = b; b.dataset.arm = s.state === 'on' ? 'Nochmal tippen: aus' : 'Nochmal tippen: an'; b.classList.add('arm'); armT = setTimeout(disarm, 3000); }
+            }
+          } else { disarm(); this._favPos = Math.round(this._favPos + d); }
         }
       }
       x0 = null; this._favLay();
