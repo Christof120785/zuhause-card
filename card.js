@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.21.0';
+const VERSION = '2.21.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -33,7 +33,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 1;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 2;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -1757,6 +1757,9 @@ class ZuhauseCard extends HTMLElement {
       const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
       const w = e => `(states('${e}') | float(0) * (1000 if state_attr('${e}', 'unit_of_measurement') == 'kW' else 1))`;
       const id = 'zuhause_wallbox_netzanteil', lim = n.lim.entity_id;
+      // Akku-Entladung zählt nicht als Sonne: sonst leert das Auto den Hausakku
+      const dis = this._ankerEnt(/entladeleistung|discharg\w* power/i);
+      const akku = [dis ? w(dis.entity_id) : '', ...this._marstek().filter(d => d.in && d.out).map(d => `([${w(d.out)} - ${w(d.in)}, 0] | max)`)].filter(Boolean);
       await h.callApi('POST', 'config/automation/config/' + id, {
         id, alias: 'Zuhause: Wallbox PV-Laden mit Netzanteil', description: 'Angelegt vom Zuhause-Dashboard. Regelt die Leistungsbegrenzung der Wallbox: Sonnenüberschuss plus eingestellter Netzanteil.', mode: 'single',
         triggers: [{ trigger: 'time_pattern', seconds: '/30' }, { trigger: 'state', entity_id: ['input_number.zuhause_wallbox_netzanteil', 'input_boolean.zuhause_wallbox_pv_regelung'] }],
@@ -1764,7 +1767,7 @@ class ZuhauseCard extends HTMLElement {
           share: "{{ states('input_number.zuhause_wallbox_netzanteil') | float(0) }}",
           aktiv: "{{ is_state('input_boolean.zuhause_wallbox_pv_regelung', 'on') and states('input_number.zuhause_wallbox_netzanteil') | float(0) > 0 }}",
           verbunden: st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s) }}` : '{{ true }}',
-          frei: `{{ ${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)} }}`,
+          frei: `{{ ${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)}${akku.map(a => ' - ' + a).join('')} }}`,
           ziel: `{{ ${WB_MAX} if share >= 100 else (frei / (1 - share / 100)) | int }}`,
           neu: `{{ [[(ziel / 100) | round(0) * 100, ${WB_MIN}] | max, ${WB_MAX}] | min | int }}`,
           jetzt: `{{ states('${lim}') | float(${WB_MAX}) }}`,
