@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.23.0';
+const VERSION = '2.23.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -689,6 +689,8 @@ class ZuhauseCard extends HTMLElement {
         else if (a === 'tmr') { this._hass.callService('light', 'turn_off', { entity_id: id, transition: 60 * (+hb.dataset.min || 30) }); this._favOpen = null; this._renderFavP(); return; }
         else if (a === 'none') return;
       }
+      const sf = e.target.closest('[data-sysfix]');
+      if (sf) { this._sysFix(...sf.dataset.sysfix.split('|')); return; }
       if (e.target.closest('[data-syshide]')) { this._sysHide = [...this._sys.bad, ...this._sys.hint].join('|'); this._renderSys(); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
@@ -1899,11 +1901,12 @@ class ZuhauseCard extends HTMLElement {
     try {
       // Apps (Add-ons): gestoppt, obwohl sie beim Start laufen sollen; ohne Watchdog als Hinweis
       const ad = await h.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' }).catch(() => null);
+      this._sysWd = new Set();
       for (const a of (ad && ad.addons) || []) {
         const info = await h.callWS({ type: 'supervisor/api', endpoint: `/addons/${a.slug}/info`, method: 'get' }).catch(() => null);
         if (!info || info.boot !== 'auto') continue;
-        if (a.state !== 'started') bad.push(`App „${a.name}“ läuft nicht <small>(Einstellungen → Apps → ${a.name} → Starten)</small>`);
-        else if (info.watchdog === false) hint.push(`App „${a.name}“: Watchdog ist aus <small>(bei einem Absturz startet sie nicht neu)</small>`);
+        if (a.state !== 'started') bad.push(`App „${a.name}“ läuft nicht <button data-sysfix="start|${a.slug}">Starten</button>`);
+        if (info.watchdog === false) { hint.push(`App „${a.name}“: Watchdog ist aus <small>(bei einem Absturz startet sie nicht neu)</small>`); (this._sysWd = this._sysWd || new Set()).add(a.slug); }
       }
       // Integrationen mit Fehler
       const ce = await h.callWS({ type: 'config_entries/get' }).catch(() => []);
@@ -1927,12 +1930,20 @@ class ZuhauseCard extends HTMLElement {
     this._renderSys();
     this._sysPush();
   }
+  async _sysFix(what, arg) {
+    const h = this._hass, api = (endpoint, data) => h.callWS({ type: 'supervisor/api', endpoint, method: 'post', ...(data ? { data } : {}) });
+    try {
+      if (what === 'start') { this._sysMsg = 'Starte …'; this._renderSys(); await api(`/addons/${arg}/start`); this._sysMsg = 'Gestartet.'; }
+      if (what === 'wd') { for (const s of arg.split(',')) await api(`/addons/${s}/options`, { watchdog: true }); this._sysWd = new Set(); this._sysMsg = 'Watchdog ist jetzt überall an.'; }
+    } catch (e) { this._sysMsg = 'Hat nicht geklappt: ' + ((e && e.message) || e); }
+    this._sysT = 0; this._sysCheck(); this._renderSys();
+  }
   _renderSys() {
     const k = this._k.sys; if (!k || !this._sys) return;
-    const { bad, hint } = this._sys, all = [...bad, ...hint];
+    const { bad, hint } = this._sys, all = [...bad, ...hint], wd = [...(this._sysWd || [])];
     if (!all.length || this._sysHide === all.join('|')) { k.hidden = true; return; }
     k.hidden = false; k.classList.toggle('ok', !bad.length);
-    k.innerHTML = `<b>⚠ Systemcheck: ${bad.length ? `${bad.length} Problem${bad.length > 1 ? 'e' : ''}` : 'nur Hinweise'}</b><button data-syshide>ausblenden</button><ul>${all.map(x => `<li>${x}</li>`).join('')}</ul>`;
+    k.innerHTML = `<b>⚠ Systemcheck: ${bad.length ? `${bad.length} Problem${bad.length > 1 ? 'e' : ''}` : 'nur Hinweise'}</b><button data-syshide>ausblenden</button><ul>${all.map(x => `<li>${x}</li>`).join('')}</ul>${wd.length ? `<button data-sysfix="wd|${wd.join(',')}" style="margin:6px 0 0">Watchdog bei allen einschalten</button>` : ''}${this._sysMsg ? `<div style="margin-top:6px;font-size:12px">${this._sysMsg}</div>` : ''}`;
   }
   // Push aufs Handy, wenn wichtige Geräte 15 Minuten keine Werte liefern (läuft in Home Assistant, auch ohne offenes Dashboard)
   _sysPush() {
