@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.20.1';
+const VERSION = '2.21.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -32,6 +32,8 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 // Haus-Bild für die Energie-Kachel (liegt im Repo)
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
+// Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 1;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -250,6 +252,11 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .seg{all:unset;cursor:pointer;flex:1;text-align:center;padding:10px 8px;border-radius:12px;background:var(--tile);font-size:13.5px;font-weight:600;color:var(--fg)}
 .seg.on{background:var(--sun);color:#fff}
 .seg[disabled]{opacity:.45;cursor:default}
+.segs-s{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
+.wbn{margin-top:10px;padding:12px;border-radius:14px;background:var(--tile)}
+.wbn-h{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px}.wbn-h span{font-weight:700;font-size:18px;color:var(--grid)}
+.wbn input{width:100%;margin:10px 0 2px;accent-color:var(--grid)}
+.wbn-s{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 .wbt{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 /* security */
 .shield{width:64px;height:64px;border-radius:50%;background:var(--batt-soft);color:var(--ok);display:grid;place-items:center;margin:4px auto}
@@ -589,12 +596,26 @@ class ZuhauseCard extends HTMLElement {
     root.querySelectorAll('section[data-sec]').forEach(e => { const b = document.createElement('div'); b.className = 'tbar'; b.hidden = true; e.prepend(b); });
     this._tileSig = null;
     // Während ein Slider bewegt wird, nicht neu zeichnen
-    root.addEventListener('pointerdown', e => { if (e.target.matches('input[type=range]')) this._busy = Date.now() + 60000; });
+    root.addEventListener('pointerdown', e => {
+      if (e.target.matches('input[type=range]')) this._busy = Date.now() + 60000;
+      // langes Drücken auf PV-Laden öffnet den Netzanteil-Regler
+      const pb = e.target.closest('[data-wbmode]');
+      clearTimeout(this._wbLp);
+      if (pb && /optimiert|optimized/i.test(pb.dataset.wbmode)) {
+        const y0 = e.clientY, x0 = e.clientX;
+        const mv = ev => { if (Math.abs(ev.clientY - y0) > 8 || Math.abs(ev.clientX - x0) > 8) clearTimeout(this._wbLp); };
+        pb.addEventListener('pointermove', mv);
+        pb.addEventListener('pointerup', () => { clearTimeout(this._wbLp); pb.removeEventListener('pointermove', mv); }, { once: true });
+        this._wbLp = setTimeout(() => { this._wbLong = true; this._wbNOpen = true; if (navigator.vibrate) navigator.vibrate(15); this._renderWbMode(); }, 500);
+      }
+    });
+    root.addEventListener('contextmenu', e => { if (e.target.closest('[data-wbmode]')) e.preventDefault(); });
     root.addEventListener('focusin', e => { if (e.target.matches('input.rn,select')) this._busy = Date.now() + 120000; });
     root.addEventListener('focusout', e => { if (e.target.matches('input.rn,select')) this._busy = 0; });
     root.addEventListener('input', e => {
       const t = e.target;
       if (t.parentNode && t.parentNode.classList && t.parentNode.classList.contains('bar')) t.parentNode.style.setProperty('--p', t.value + '%');
+      if (t.dataset.wbn) { this._busy = Date.now() + 60000; const v = this._k.wbmode.querySelector('[data-k2="wbnv"]'); if (v) v.textContent = t.value + ' %'; }
       if (t.dataset.dim || t.dataset.pos) {
         this._busy = Date.now() + 60000;
         const s = t.closest('.row') && t.closest('.row').querySelector('.txt span');
@@ -604,6 +625,20 @@ class ZuhauseCard extends HTMLElement {
     root.addEventListener('change', e => {
       const t = e.target;
       if (t.dataset.dim) this._dim(t.dataset.dim, +t.value);
+      if (t.dataset.wbn) {
+        // Netzanteil setzen; > 0 schaltet die eigene Regelung ein, 0 gibt die Wallbox an den Home Manager zurück
+        const h = this._hass, n = this._wbN(), v = +t.value;
+        this._busy = 0;
+        h.callService('input_number', 'set_value', { entity_id: t.dataset.wbn, value: v }).then(() => {
+          if (n.bool) h.callService('input_boolean', v > 0 ? 'turn_on' : 'turn_off', { entity_id: n.bool.entity_id });
+          const sel = this._wbEnt(['select'], /betriebsart des ladevorgangs|charging mode|operating mode of charge/i);
+          const pv = sel && (sel.attributes.options || []).find(o => /optimiert|optimized/i.test(o));
+          if (sel && pv) {
+            if (v === 0 && n.bool && n.bool.state === 'on' && sel.state !== pv) h.callService('select', 'select_option', { entity_id: sel.entity_id, option: pv });
+            if (v > 0 && sel.state !== pv && !(n.bool && n.bool.state === 'on')) h.callService('select', 'select_option', { entity_id: sel.entity_id, option: pv });
+          }
+        });
+      }
       if (t.dataset.pos) this._hass.callService('cover', 'set_cover_position', { entity_id: t.dataset.pos, position: +t.value });
       if (this._lay && (t.dataset.rname || t.dataset.dname || t.dataset.droom)) {
         const L = this._lay; L.names = L.names || {}; L.dev = L.dev || {};
@@ -633,8 +668,12 @@ class ZuhauseCard extends HTMLElement {
         else if (a === 'tmr') { this._hass.callService('light', 'turn_off', { entity_id: id, transition: 60 * (+hb.dataset.min || 30) }); this._favOpen = null; this._renderFavP(); return; }
         else if (a === 'none') return;
       }
+      if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
-      if (wm && !wm.disabled) { const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return; }
+      if (wm && !wm.disabled) {
+        if (this._wbLong) { this._wbLong = false; return; }
+        const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return;
+      }
       const nt = e.target.closest('[data-notiftg]');
       if (nt) { this._hass.callService('automation', nt.getAttribute('aria-checked') === 'true' ? 'turn_off' : 'turn_on', { entity_id: nt.dataset.notiftg }); return; }
       const nb = e.target.closest('[data-notif]');
@@ -1680,7 +1719,13 @@ class ZuhauseCard extends HTMLElement {
   }
 
   async _setWbMode(eid, opt) {
-    const h = this._hass;
+    const h = this._hass, n = this._wbN();
+    // PV-Laden mit Netzanteil: die Regel-Automation übernimmt. Schnell: Regelung aus, volle Leistung
+    if (n.bool) {
+      const pvMode = /optimiert|optimized/i.test(opt);
+      await h.callService('input_boolean', pvMode && n.share > 0 ? 'turn_on' : 'turn_off', { entity_id: n.bool.entity_id }).catch(() => {});
+      if (!pvMode && n.lim && +n.lim.state < WB_MAX) await h.callService('number', 'set_value', { entity_id: n.lim.entity_id, value: WB_MAX }).catch(() => {});
+    }
     if (/vorgabe|setpoint/i.test(opt)) {
       const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
       if (en && du) {
@@ -1692,6 +1737,57 @@ class ZuhauseCard extends HTMLElement {
       }
     }
     h.callService('select', 'select_option', { entity_id: eid, option: opt });
+  }
+
+  // ---------- Netzanteil beim PV-Laden (eigene Regelung statt SMA-Portal) ----------
+  _wbN() {
+    const h = this._hass, num = h.states['input_number.zuhause_wallbox_netzanteil'], bool = h.states['input_boolean.zuhause_wallbox_pv_regelung'];
+    return { num, bool, share: num ? Math.round(+num.state || 0) : 0, lim: this._wbEnt(['number'], /leistungsbegrenzung|power limit/i) };
+  }
+  // legt Helfer und Regel-Automation einmalig an (nur Admin); WBN_V hochzählen, wenn sich die Automation ändert
+  async _wbNSetup(sel, pv, fast, n) {
+    const h = this._hass, c = this._cfg, L = this._lay;
+    if (this._wbNT || !L || !(h.user && h.user.is_admin) || !n.lim || !pv || !fast || !c.grid_in || !c.grid_out || !c.wallbox) return;
+    if (n.num && n.bool && L.wbnV === WBN_V) return;
+    this._wbNT = true;
+    try {
+      if (!n.num) await h.callWS({ type: 'input_number/create', name: 'Zuhause Wallbox Netzanteil', min: 0, max: 100, step: 10, mode: 'slider', unit_of_measurement: '%', icon: 'mdi:transmission-tower', initial: 0 });
+      if (!n.bool) await h.callWS({ type: 'input_boolean/create', name: 'Zuhause Wallbox PV-Regelung', icon: 'mdi:solar-power' });
+      const st = this._wbEnt(['sensor'], /status ladevorgang|charging session status/i);
+      const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
+      const w = e => `(states('${e}') | float(0) * (1000 if state_attr('${e}', 'unit_of_measurement') == 'kW' else 1))`;
+      const id = 'zuhause_wallbox_netzanteil', lim = n.lim.entity_id;
+      await h.callApi('POST', 'config/automation/config/' + id, {
+        id, alias: 'Zuhause: Wallbox PV-Laden mit Netzanteil', description: 'Angelegt vom Zuhause-Dashboard. Regelt die Leistungsbegrenzung der Wallbox: Sonnenüberschuss plus eingestellter Netzanteil.', mode: 'single',
+        triggers: [{ trigger: 'time_pattern', seconds: '/30' }, { trigger: 'state', entity_id: ['input_number.zuhause_wallbox_netzanteil', 'input_boolean.zuhause_wallbox_pv_regelung'] }],
+        variables: {
+          share: "{{ states('input_number.zuhause_wallbox_netzanteil') | float(0) }}",
+          aktiv: "{{ is_state('input_boolean.zuhause_wallbox_pv_regelung', 'on') and states('input_number.zuhause_wallbox_netzanteil') | float(0) > 0 }}",
+          verbunden: st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s) }}` : '{{ true }}',
+          frei: `{{ ${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)} }}`,
+          ziel: `{{ ${WB_MAX} if share >= 100 else (frei / (1 - share / 100)) | int }}`,
+          neu: `{{ [[(ziel / 100) | round(0) * 100, ${WB_MIN}] | max, ${WB_MAX}] | min | int }}`,
+          jetzt: `{{ states('${lim}') | float(${WB_MAX}) }}`,
+          modus: `{{ states('${sel.entity_id}') }}`,
+        },
+        actions: [{
+          choose: [
+            { conditions: [{ condition: 'template', value_template: '{{ not aktiv or not verbunden }}' }],
+              sequence: [{ condition: 'template', value_template: `{{ jetzt < ${WB_MAX} }}` }, { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MAX } }] },
+            { conditions: [{ condition: 'template', value_template: `{{ modus == '${pv}' and ziel >= ${WB_MIN + 400} }}` }],
+              sequence: [
+                ...(en && du ? [{ action: 'number.set_value', target: { entity_id: en.entity_id }, data: { value: 100 } }, { action: 'number.set_value', target: { entity_id: du.entity_id }, data: { value: 545 } }] : []),
+                { action: 'number.set_value', target: { entity_id: lim }, data: { value: '{{ neu }}' } },
+                { action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: fast } }] },
+            { conditions: [{ condition: 'template', value_template: `{{ modus == '${fast}' and ziel < ${WB_MIN} }}` }],
+              sequence: [{ action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: pv } }, { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MAX } }] },
+            { conditions: [{ condition: 'template', value_template: `{{ modus == '${fast}' and (neu - jetzt) | abs >= 300 }}` }],
+              sequence: [{ action: 'number.set_value', target: { entity_id: lim }, data: { value: '{{ neu }}' } }] },
+          ],
+        }],
+      });
+      L.wbnV = WBN_V; this._save();
+    } catch (e) { console.warn('zuhause-card: Netzanteil einrichten', e); }
   }
 
   _renderWbMode() {
@@ -1706,8 +1802,17 @@ class ZuhauseCard extends HTMLElement {
     this._wbAuto(sel, pv);
     const sw = this._wbEnt(['sensor'], /drehschalter|rotary switch/i);
     const locked = sw && /schnell|fast/i.test(sw.state);
-    const btn = (o, label) => o ? `<button class="seg${cur === o ? ' on' : ''}" data-wbmode="${sel.entity_id}|${o}" ${locked ? 'disabled' : ''}>${label}</button>` : '';
-    const html = `<div class="segs">${btn(pv, '☀ PV-Laden')}${btn(fast, '⚡ Schnell')}</div>`
+    const n = this._wbN(), reg = n.bool && n.bool.state === 'on' && n.share > 0;
+    this._wbNSetup(sel, pv, fast, n);
+    const isOn = o => o === pv ? cur === pv || reg : cur === o && !reg;
+    const btn = (o, label) => o ? `<button class="seg${isOn(o) ? ' on' : ''}" data-wbmode="${sel.entity_id}|${o}" ${locked ? 'disabled' : ''}>${label}</button>` : '';
+    const pvl = n.num ? `☀ PV-Laden<small class="segs-s">${n.share > 0 ? `+ ${n.share} % Netz` : 'nur Sonne'}</small>` : '☀ PV-Laden';
+    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>`
+      + (this._wbNOpen && n.num ? `<div class="wbn"><div class="wbn-h"><b>Netzanteil beim PV-Laden</b><span data-k2="wbnv">${n.share} %</span></div>
+        <input type="range" min="0" max="100" step="10" value="${n.share}" data-wbn="${n.num.entity_id}" aria-label="Netzanteil">
+        <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
+        <p class="sub" style="margin:6px 0 0">Bei ${n.share || 30} % kommen höchstens ${n.share || 30} % des Ladestroms aus dem Netz, der Rest von der Sonne. Reicht die Sonne nicht einmal für die Mindestleistung (4,2 kW), entscheidet wieder der Home Manager.</p>
+        <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '')
       + (locked ? `<p class="sub" style="margin:6px 0 0;color:var(--warn,#c77d18)">Der Drehschalter an der Wallbox steht auf Schnellladen. Stell ihn einmal auf die zweite Stellung, dann kannst du hier umschalten.</p>` : '');
     if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
   }
