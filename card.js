@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.23.1';
+const VERSION = '2.23.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1888,6 +1888,13 @@ class ZuhauseCard extends HTMLElement {
       for (const a of (ad && ad.addons) || []) {
         const info = await h.callWS({ type: 'supervisor/api', endpoint: `/addons/${a.slug}/info`, method: 'get' }).catch(() => null);
         if (!info || info.boot !== 'auto') continue;
+        // Sensoren, die eine App liest (z. B. AstraMeter den Shelly), mitprüfen: fehlen sie, stürzt die App beim Start ab
+        JSON.stringify(info.options || {}).replace(/sensor\.[a-z0-9_]+/g, id => {
+          const s = h.states[id];
+          if (!s) bad.push(`App „${a.name}“ liest ${id}, den gibt es nicht`);
+          else if (/^(unavailable|unknown)$/.test(s.state)) bad.push(`${nm(id)} (für ${a.name}): keine Werte`);
+          return id;
+        });
         if (a.state !== 'started') bad.push(`App „${a.name}“ läuft nicht <button data-sysfix="start|${a.slug}">Starten</button>`);
         if (info.watchdog === false) { hint.push(`App „${a.name}“: Watchdog ist aus <small>(bei einem Absturz startet sie nicht neu)</small>`); (this._sysWd = this._sysWd || new Set()).add(a.slug); }
       }
