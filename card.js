@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.23.3';
+const VERSION = '2.24.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -185,6 +185,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 /* Lichtimpuls (hellblau mit Schweif), der auf den Kabeln im Bild entlangläuft: Richtung = wohin der Strom fließt (.rev = rückwärts) */
 .flow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .flow path{fill:none;stroke-linecap:round;stroke-linejoin:round;transition:opacity .4s}
+.flow .cab{fill:none;stroke:#55595f;stroke-width:3.5;stroke-linejoin:round;stroke-linecap:round}
 .flow .p{stroke-width:7;animation:pulse 1.8s linear infinite;animation-delay:var(--d)}
 .flow .p.t1{stroke:#3d8bff;opacity:.35;stroke-dasharray:22 78}
 .flow .p.t2{stroke:#5aa8ff;opacity:.7;stroke-dasharray:12 88}
@@ -529,9 +530,10 @@ class ZuhauseCard extends HTMLElement {
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
           <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
+            <path class="cab" d="M487 641L562 637L562 579L657 575L684 566L747 562"/>
             ${[['fpv', 'M846 140L909 226L915 240L916 534L803 551', 'var(--sun)'], ['fbk', 'M215 421L255 437L401 428L404 433L404 512L396 521L396 618', 'var(--sun)'],
               ['fbat', 'M627 708L667 704L669 584L684 566L747 562', 'var(--batt)'], ['fgrid', 'M948 777L768 690L766 600', 'var(--grid)'],
-              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff']].map(([k, d, col]) =>
+              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M487 641L562 637L562 579L657 575L684 566L747 562', 'var(--sun)']].map(([k, d, col]) =>
               `<g data-k="${k}" class="idle">${[['t1', -1.494], ['t2', -1.674], ['t3', 0]].map(([c, dl]) => `<path class="p ${c}" d="${d}" pathLength="100" style="--d:${dl}s"/>`).join('')}</g>`).join('')}
           </svg>
           <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
@@ -1885,7 +1887,7 @@ class ZuhauseCard extends HTMLElement {
       // Apps (Add-ons): gestoppt, obwohl sie beim Start laufen sollen; ohne Watchdog als Hinweis
       const ad = await h.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' }).catch(() => null);
       this._sysWd = new Set(); this._sysRen = {};
-      for (const a of (ad && ad.addons) || []) {
+      for (const a of (ad && Array.isArray(ad.addons) && ad.addons) || []) {
         const info = await h.callWS({ type: 'supervisor/api', endpoint: `/addons/${a.slug}/info`, method: 'get' }).catch(() => null);
         if (!info || info.boot !== 'auto') continue;
         // Sensoren, die eine App liest (z. B. AstraMeter den Shelly), mitprüfen: fehlen sie, stürzt die App beim Start ab
@@ -1902,7 +1904,7 @@ class ZuhauseCard extends HTMLElement {
       }
       // Integrationen mit Fehler
       const ce = await h.callWS({ type: 'config_entries/get' }).catch(() => []);
-      (ce || []).filter(e => !e.disabled_by && /setup_error|setup_retry|migration_error|failed_unload/.test(e.state))
+      (Array.isArray(ce) ? ce : []).filter(e => !e.disabled_by && /setup_error|setup_retry|migration_error|failed_unload/.test(e.state))
         .forEach(e => bad.push(`Integration „${e.title}“ hat einen Fehler <small>(Einstellungen → Geräte & Dienste)</small>`));
       // Geräte ohne Werte oder mit veralteten Werten
       this._sysEnts().forEach(({ id, age }) => {
@@ -1915,7 +1917,7 @@ class ZuhauseCard extends HTMLElement {
         .forEach(x => bad.push(`Automation „${x.attributes.friendly_name}“ ist fehlerhaft`));
       // offene Reparaturen von Home Assistant
       const rp = await h.callWS({ type: 'repairs/list_issues' }).catch(() => null);
-      const iss = ((rp && rp.issues) || []).filter(i => !i.ignored && !i.dismissed_version);
+      const iss = ((rp && Array.isArray(rp.issues) && rp.issues) || []).filter(i => !i.ignored && !i.dismissed_version);
       if (iss.length) hint.push(`${iss.length} offene Reparatur-Hinweise <small>(Einstellungen → Reparaturen: ${[...new Set(iss.map(i => i.domain))].join(', ')})</small>`);
     } finally { this._sysBusy = false; }
     this._sys = { bad, hint };
@@ -2014,6 +2016,9 @@ class ZuhauseCard extends HTMLElement {
     this._set('sbk2', mods.length ? mods.map(v => Math.round(v)).join(' · ') + ' W' : '');
     k.dbk.classList.toggle('idle', !(mIn > 0.005));
     this._flow('fbk', mIn > 0.005);
+    // Marstek gibt ab: Leitung von den Marsteks zum Verteiler (im Bild fehlte das Kabel, deshalb als .cab gezeichnet)
+    const mOut = this._marstek().reduce((a, d) => a + (this._kw(d.out) || 0), 0);
+    this._flow('fmk', mOut > 0.005);
     this._renderFav();
     pw('house', house + wb);
     this._set('shouse', wb > 0.05 ? 'inkl. Wallbox' : 'Verbrauch');
