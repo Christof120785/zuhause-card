@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.24.1';
+const VERSION = '2.24.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -530,10 +530,10 @@ class ZuhauseCard extends HTMLElement {
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
           <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
-            <path class="cab" d="M487 641L562 637L562 579L657 575L684 566L747 562"/>
+            <path class="cab" d="M458 614L458 585L657 572"/>
             ${[['fpv', 'M846 140L909 226L915 240L916 534L803 551', 'var(--sun)'], ['fbk', 'M215 421L255 437L401 428L404 433L404 512L396 521L396 618', 'var(--sun)'],
               ['fbat', 'M627 708L667 704L669 584L684 566L747 562', 'var(--batt)'], ['fgrid', 'M948 777L768 690L766 600', 'var(--grid)'],
-              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M487 641L562 637L562 579L657 575L684 566L747 562', 'var(--sun)']].map(([k, d, col]) =>
+              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)']].map(([k, d, col]) =>
               `<g data-k="${k}" class="idle">${[['t1', -1.494], ['t2', -1.674], ['t3', 0]].map(([c, dl]) => `<path class="p ${c}" d="${d}" pathLength="100" style="--d:${dl}s"/>`).join('')}</g>`).join('')}
           </svg>
           <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
