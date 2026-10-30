@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.21.1';
+const VERSION = '2.22.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -33,7 +33,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 2;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 3;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -668,6 +668,7 @@ class ZuhauseCard extends HTMLElement {
         else if (a === 'tmr') { this._hass.callService('light', 'turn_off', { entity_id: id, transition: 60 * (+hb.dataset.min || 30) }); this._favOpen = null; this._renderFavP(); return; }
         else if (a === 'none') return;
       }
+      if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) {
@@ -1742,17 +1743,22 @@ class ZuhauseCard extends HTMLElement {
   // ---------- Netzanteil beim PV-Laden (eigene Regelung statt SMA-Portal) ----------
   _wbN() {
     const h = this._hass, num = h.states['input_number.zuhause_wallbox_netzanteil'], bool = h.states['input_boolean.zuhause_wallbox_pv_regelung'];
-    return { num, bool, share: num ? Math.round(+num.state || 0) : 0, lim: this._wbEnt(['number'], /leistungsbegrenzung|power limit/i) };
+    const ank = (d, re) => Object.values(h.states).find(x => x.entity_id.startsWith(d + '.') && /solarbank|anker solix/i.test(x.attributes.friendly_name || '') && re.test(x.attributes.friendly_name || ''));
+    return { num, bool, share: num ? Math.round(+num.state || 0) : 0, lim: this._wbEnt(['number'], /leistungsbegrenzung|power limit/i),
+      akkuOk: h.states['input_boolean.zuhause_wallbox_akku_erlaubt'], pause: h.states['input_boolean.zuhause_anker_pausiert'],
+      aMode: ank('select', /betriebsmodus|usage mode/i), aOut: ank('number', /leistungssteuerung|output preset|system output/i) };
   }
   // legt Helfer und Regel-Automation einmalig an (nur Admin); WBN_V hochzählen, wenn sich die Automation ändert
   async _wbNSetup(sel, pv, fast, n) {
     const h = this._hass, c = this._cfg, L = this._lay;
     if (this._wbNT || !L || !(h.user && h.user.is_admin) || !n.lim || !pv || !fast || !c.grid_in || !c.grid_out || !c.wallbox) return;
-    if (n.num && n.bool && L.wbnV === WBN_V) return;
+    if (n.num && n.bool && (n.akkuOk || !n.aMode) && L.wbnV === WBN_V) return;
     this._wbNT = true;
     try {
       if (!n.num) await h.callWS({ type: 'input_number/create', name: 'Zuhause Wallbox Netzanteil', min: 0, max: 100, step: 10, mode: 'slider', unit_of_measurement: '%', icon: 'mdi:transmission-tower', initial: 0 });
       if (!n.bool) await h.callWS({ type: 'input_boolean/create', name: 'Zuhause Wallbox PV-Regelung', icon: 'mdi:solar-power' });
+      if (n.aMode && !n.akkuOk) await h.callWS({ type: 'input_boolean/create', name: 'Zuhause Wallbox Akku erlaubt', icon: 'mdi:home-battery' });
+      if (n.aMode && !n.pause) await h.callWS({ type: 'input_boolean/create', name: 'Zuhause Anker pausiert', icon: 'mdi:pause-circle' });
       const st = this._wbEnt(['sensor'], /status ladevorgang|charging session status/i);
       const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
       const w = e => `(states('${e}') | float(0) * (1000 if state_attr('${e}', 'unit_of_measurement') == 'kW' else 1))`;
@@ -1767,7 +1773,7 @@ class ZuhauseCard extends HTMLElement {
           share: "{{ states('input_number.zuhause_wallbox_netzanteil') | float(0) }}",
           aktiv: "{{ is_state('input_boolean.zuhause_wallbox_pv_regelung', 'on') and states('input_number.zuhause_wallbox_netzanteil') | float(0) > 0 }}",
           verbunden: st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s) }}` : '{{ true }}',
-          frei: `{{ ${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)}${akku.map(a => ' - ' + a).join('')} }}`,
+          frei: `{{ ${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)}${akku.length ? ` - (0 if is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on') else (${akku.join(' + ')}))` : ''} }}`,
           ziel: `{{ ${WB_MAX} if share >= 100 else (frei / (1 - share / 100)) | int }}`,
           neu: `{{ [[(ziel / 100) | round(0) * 100, ${WB_MIN}] | max, ${WB_MAX}] | min | int }}`,
           jetzt: `{{ states('${lim}') | float(${WB_MAX}) }}`,
@@ -1789,6 +1795,31 @@ class ZuhauseCard extends HTMLElement {
           ],
         }],
       });
+      // Hausakku schützen: solange das Auto lädt, gibt der Anker nichts ab (Benutzerdefinierter Modus mit 0 W), danach wieder Eigenverbrauch
+      const modes = n.aMode ? n.aMode.attributes.options || [] : [];
+      const mEig = modes.find(o => /eigenverbrauch|self.?consumption/i.test(o)), mMan = modes.find(o => /benutzerdefiniert|custom|manual/i.test(o));
+      if (n.aMode && n.aOut && mEig && mMan) {
+        const am = n.aMode.entity_id, wb = w(c.wallbox);
+        await h.callApi('POST', 'config/automation/config/zuhause_wallbox_akku_schutz', {
+          id: 'zuhause_wallbox_akku_schutz', alias: 'Zuhause: Hausakku lädt das Auto nicht', description: 'Angelegt vom Zuhause-Dashboard. Solange das Auto lädt, gibt der Anker-Speicher nichts ab, außer „Speicher darf Auto mitladen“ ist an.', mode: 'queued',
+          triggers: [
+            { trigger: 'template', value_template: `{{ ${wb} > 1500 }}`, for: { minutes: 1 }, id: 'laedt' },
+            { trigger: 'template', value_template: `{{ ${wb} < 300 }}`, for: { minutes: 2 }, id: 'fertig' },
+            { trigger: 'state', entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt', id: 'erlaubt' },
+          ],
+          actions: [{ choose: [
+            { conditions: [{ condition: 'template', value_template: `{{ ${wb} > 1500 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and is_state('input_boolean.zuhause_anker_pausiert', 'off') and is_state('${am}', '${mEig}') }}` }],
+              sequence: [
+                { action: 'number.set_value', target: { entity_id: n.aOut.entity_id }, data: { value: 0 } },
+                { action: 'select.select_option', target: { entity_id: am }, data: { option: mMan } },
+                { action: 'input_boolean.turn_on', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }] },
+            { conditions: [{ condition: 'template', value_template: `{{ is_state('input_boolean.zuhause_anker_pausiert', 'on') and (${wb} < 300 or is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on')) }}` }],
+              sequence: [
+                { action: 'select.select_option', target: { entity_id: am }, data: { option: mEig } },
+                { action: 'input_boolean.turn_off', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }] },
+          ] }],
+        });
+      }
       L.wbnV = WBN_V; this._save();
     } catch (e) { console.warn('zuhause-card: Netzanteil einrichten', e); }
   }
@@ -1815,6 +1846,7 @@ class ZuhauseCard extends HTMLElement {
         <input type="range" min="0" max="100" step="10" value="${n.share}" data-wbn="${n.num.entity_id}" aria-label="Netzanteil">
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
         <p class="sub" style="margin:6px 0 0">Bei ${n.share || 30} % kommen höchstens ${n.share || 30} % des Ladestroms aus dem Netz, der Rest von der Sonne. Reicht die Sonne nicht einmal für die Mindestleistung (4,2 kW), entscheidet wieder der Home Manager.</p>
+        ${n.akkuOk ? `<div class="row" style="margin-top:8px"><div class="txt"><b>Speicher darf Auto mitladen</b><div class="s" style="color:var(--muted);font-size:12px">${n.akkuOk.state === 'on' ? 'Der Anker hilft beim Laden mit' : n.pause && n.pause.state === 'on' ? 'Anker pausiert, solange das Auto lädt' : 'Aus: Der Anker bleibt fürs Haus voll'}</div></div><button class="tg" role="switch" aria-label="Speicher darf Auto mitladen" aria-checked="${n.akkuOk.state === 'on'}" data-wbakku></button></div>` : ''}
         <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '')
       + (locked ? `<p class="sub" style="margin:6px 0 0;color:var(--warn,#c77d18)">Der Drehschalter an der Wallbox steht auf Schnellladen. Stell ihn einmal auf die zweite Stellung, dann kannst du hier umschalten.</p>` : '');
     if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
