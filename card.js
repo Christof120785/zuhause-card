@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.22.1';
+const VERSION = '2.23.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -33,7 +33,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 4;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 5;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -156,6 +156,10 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .hero p{color:var(--hero-mut);font-size:12.5px;margin:4px 0 10px}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{border:1px solid rgba(255,255,255,.18);border-radius:99px;padding:4px 11px;font-size:12px}
+.sysw{margin-top:12px;border-radius:14px;background:rgba(255,170,60,.14);box-shadow:inset 0 0 0 1px rgba(255,170,60,.35);padding:10px 12px;font-size:13px;max-width:520px}
+.sysw b{color:#ffc06b}.sysw ul{margin:6px 0 0;padding-left:18px}.sysw li{margin:3px 0}.sysw li small{opacity:.7}
+.sysw.ok{background:rgba(98,196,139,.14);box-shadow:inset 0 0 0 1px rgba(98,196,139,.35)}.sysw.ok b{color:#8fe0b0}
+.sysw button{all:unset;cursor:pointer;text-decoration:underline;font-size:12px;opacity:.8;margin-left:6px}
 .wxn{text-align:right}
 .wxn .t{font-family:var(--display);font-size:30px;font-weight:600}
 .wxn .t small{font-size:14px;color:var(--hero-mut)}
@@ -514,7 +518,7 @@ class ZuhauseCard extends HTMLElement {
       <section class="card hero"><span class="ver">v${VERSION}${window.__zuhauseSrc === 'lokal' ? ' · lokal' : ''}</span>
         <div><h1><span data-k="greet">Hallo</span>,<br><em><span data-k="uname">${c.name}</span>.</em></h1>
           <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
-          <div class="chips"><span class="chip" data-k="chOpen"></span></div></div>
+          <div class="chips"><span class="chip" data-k="chOpen"></span></div><div class="sysw" data-k="sys" hidden></div></div>
         <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
           <div data-k="alarm"></div></div>
       </section>
@@ -668,6 +672,7 @@ class ZuhauseCard extends HTMLElement {
         else if (a === 'tmr') { this._hass.callService('light', 'turn_off', { entity_id: id, transition: 60 * (+hb.dataset.min || 30) }); this._favOpen = null; this._renderFavP(); return; }
         else if (a === 'none') return;
       }
+      if (e.target.closest('[data-syshide]')) { this._sysHide = [...this._sys.bad, ...this._sys.hint].join('|'); this._renderSys(); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
@@ -1752,13 +1757,14 @@ class ZuhauseCard extends HTMLElement {
   async _wbNSetup(sel, pv, fast, n) {
     const h = this._hass, c = this._cfg, L = this._lay;
     if (this._wbNT || !L || !(h.user && h.user.is_admin) || !n.lim || !pv || !fast || !c.grid_in || !c.grid_out || !c.wallbox) return;
-    if (n.num && n.bool && (n.akkuOk || !n.aMode) && L.wbnV === WBN_V) return;
+    if (n.num && n.bool && (n.akkuOk || !n.aMode) && (h.states['input_text.zuhause_anker_modus_vorher'] || !n.aMode) && L.wbnV === WBN_V) return;
     this._wbNT = true;
     try {
       if (!n.num) await h.callWS({ type: 'input_number/create', name: 'Zuhause Wallbox Netzanteil', min: 0, max: 100, step: 10, mode: 'slider', unit_of_measurement: '%', icon: 'mdi:transmission-tower', initial: 0 });
       if (!n.bool) await h.callWS({ type: 'input_boolean/create', name: 'Zuhause Wallbox PV-Regelung', icon: 'mdi:solar-power' });
       if (n.aMode && !n.akkuOk) await h.callWS({ type: 'input_boolean/create', name: 'Zuhause Wallbox Akku erlaubt', icon: 'mdi:home-battery' });
       if (n.aMode && !n.pause) await h.callWS({ type: 'input_boolean/create', name: 'Zuhause Anker pausiert', icon: 'mdi:pause-circle' });
+      if (n.aMode && !h.states['input_text.zuhause_anker_modus_vorher']) await h.callWS({ type: 'input_text/create', name: 'Zuhause Anker Modus vorher', max: 60 });
       const st = this._wbEnt(['sensor'], /status ladevorgang|charging session status/i);
       const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
       const w = e => `(states('${e}') | float(0) * (1000 if state_attr('${e}', 'unit_of_measurement') == 'kW' else 1))`;
@@ -1798,6 +1804,8 @@ class ZuhauseCard extends HTMLElement {
       // Hausakku schützen: solange das Auto lädt, gibt der Anker nichts ab (Benutzerdefinierter Modus mit 0 W), danach wieder Eigenverbrauch
       const modes = n.aMode ? n.aMode.attributes.options || [] : [];
       const mEig = modes.find(o => /eigenverbrauch|self.?consumption/i.test(o)), mMan = modes.find(o => /benutzerdefiniert|custom|manual/i.test(o));
+      // nur aus diesen Modi pausieren und danach genau dorthin zurück (Christof nutzt mal Eigenverbrauch, mal Smart-Modus)
+      const mOk = modes.filter(o => /eigenverbrauch|self.?consumption|smart/i.test(o));
       if (n.aMode && n.aOut && mEig && mMan) {
         const am = n.aMode.entity_id, wb = w(c.wallbox);
         await h.callApi('POST', 'config/automation/config/zuhause_wallbox_akku_schutz', {
@@ -1810,14 +1818,15 @@ class ZuhauseCard extends HTMLElement {
             { trigger: 'time_pattern', minutes: '/1' },
           ],
           actions: [{ choose: [
-            { conditions: [{ condition: 'template', value_template: `{{ ${wb} > 1500 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and is_state('input_boolean.zuhause_anker_pausiert', 'off') and is_state('${am}', '${mEig}') }}` }],
+            { conditions: [{ condition: 'template', value_template: `{{ ${wb} > 1500 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and is_state('input_boolean.zuhause_anker_pausiert', 'off') and states('${am}') in ${JSON.stringify(mOk)} }}` }],
               sequence: [
+                { action: 'input_text.set_value', target: { entity_id: 'input_text.zuhause_anker_modus_vorher' }, data: { value: `{{ states('${am}') }}` } },
                 { action: 'number.set_value', target: { entity_id: n.aOut.entity_id }, data: { value: 0 } },
                 { action: 'select.select_option', target: { entity_id: am }, data: { option: mMan } },
                 { action: 'input_boolean.turn_on', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }] },
             { conditions: [{ condition: 'template', value_template: `{{ is_state('input_boolean.zuhause_anker_pausiert', 'on') and (${wb} < 300 or is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on')) }}` }],
               sequence: [
-                { action: 'select.select_option', target: { entity_id: am }, data: { option: mEig } },
+                { action: 'select.select_option', target: { entity_id: am }, data: { option: `{% set v = states('input_text.zuhause_anker_modus_vorher') %}{{ v if v in ${JSON.stringify(mOk)} else '${mEig}' }}` } },
                 { action: 'input_boolean.turn_off', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }] },
           ] }],
         });
@@ -1854,8 +1863,78 @@ class ZuhauseCard extends HTMLElement {
     if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
   }
 
+  // ---------- Systemcheck: findet ausgefallene Apps, Integrationen und Geräte, bevor man es zufällig merkt ----------
+  _sysEnts() {
+    const c = this._cfg, h = this._hass, out = [];
+    const add = (id, age) => { if (id && h.states[id] && !out.some(x => x.id === id)) out.push({ id, age }); };
+    add(c.pv, 30); add(c.grid_in, 30); add(c.grid_out, 30); add(c.wallbox, 30); add(c.weather, 0);
+    this._marstek().forEach(d => { add(d.soc, 20); add(d.in, 20); });
+    const ank = this._ankerEnt(/ladezustand|ladestand|state of charge|soc|akku|batterie/i, /kapazit|capacity|leistung|power/i); if (ank) add(ank.entity_id, 30);
+    add(this._presence(), 0);
+    return out;
+  }
+  async _sysCheck() {
+    const h = this._hass;
+    if (!(h.user && h.user.is_admin) || this._sysBusy || Date.now() - (this._sysT || 0) < 120000) return;
+    this._sysBusy = true; this._sysT = Date.now();
+    const bad = [], hint = [], now = Date.now();
+    const nm = id => (h.states[id] && h.states[id].attributes.friendly_name) || id;
+    try {
+      // Apps (Add-ons): gestoppt, obwohl sie beim Start laufen sollen; ohne Watchdog als Hinweis
+      const ad = await h.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' }).catch(() => null);
+      for (const a of (ad && ad.addons) || []) {
+        const info = await h.callWS({ type: 'supervisor/api', endpoint: `/addons/${a.slug}/info`, method: 'get' }).catch(() => null);
+        if (!info || info.boot !== 'auto') continue;
+        if (a.state !== 'started') bad.push(`App „${a.name}“ läuft nicht <small>(Einstellungen → Apps → ${a.name} → Starten)</small>`);
+        else if (info.watchdog === false) hint.push(`App „${a.name}“: Watchdog ist aus <small>(bei einem Absturz startet sie nicht neu)</small>`);
+      }
+      // Integrationen mit Fehler
+      const ce = await h.callWS({ type: 'config_entries/get' }).catch(() => []);
+      (ce || []).filter(e => !e.disabled_by && /setup_error|setup_retry|migration_error|failed_unload/.test(e.state))
+        .forEach(e => bad.push(`Integration „${e.title}“ hat einen Fehler <small>(Einstellungen → Geräte & Dienste)</small>`));
+      // Geräte ohne Werte oder mit veralteten Werten
+      this._sysEnts().forEach(({ id, age }) => {
+        const s = h.states[id];
+        if (/^(unavailable|unknown)$/.test(s.state)) bad.push(`${nm(id)}: keine Werte`);
+        else if (age && s.last_reported && now - Date.parse(s.last_reported) > age * 60000) bad.push(`${nm(id)}: seit ${Math.round((now - Date.parse(s.last_reported)) / 60000)} min keine neuen Werte`);
+      });
+      // Vom Dashboard angelegte Automationen mit Fehler
+      Object.values(h.states).filter(x => x.entity_id.startsWith('automation.') && /^zuhause:/i.test(x.attributes.friendly_name || '') && x.state === 'unavailable')
+        .forEach(x => bad.push(`Automation „${x.attributes.friendly_name}“ ist fehlerhaft`));
+      // offene Reparaturen von Home Assistant
+      const rp = await h.callWS({ type: 'repairs/list_issues' }).catch(() => null);
+      const iss = ((rp && rp.issues) || []).filter(i => !i.ignored && !i.dismissed_version);
+      if (iss.length) hint.push(`${iss.length} offene Reparatur-Hinweise <small>(Einstellungen → Reparaturen: ${[...new Set(iss.map(i => i.domain))].join(', ')})</small>`);
+    } finally { this._sysBusy = false; }
+    this._sys = { bad, hint };
+    this._renderSys();
+    this._sysPush();
+  }
+  _renderSys() {
+    const k = this._k.sys; if (!k || !this._sys) return;
+    const { bad, hint } = this._sys, all = [...bad, ...hint];
+    if (!all.length || this._sysHide === all.join('|')) { k.hidden = true; return; }
+    k.hidden = false; k.classList.toggle('ok', !bad.length);
+    k.innerHTML = `<b>⚠ Systemcheck: ${bad.length ? `${bad.length} Problem${bad.length > 1 ? 'e' : ''}` : 'nur Hinweise'}</b><button data-syshide>ausblenden</button><ul>${all.map(x => `<li>${x}</li>`).join('')}</ul>`;
+  }
+  // Push aufs Handy, wenn wichtige Geräte 15 Minuten keine Werte liefern (läuft in Home Assistant, auch ohne offenes Dashboard)
+  _sysPush() {
+    const h = this._hass, L = this._lay;
+    if (this._sysPushT || !L || L.sysV === 1) return;
+    const phones = Object.keys((h.services && h.services.notify) || {}).filter(x => x.startsWith('mobile_app_'));
+    const ids = this._sysEnts().map(x => x.id);
+    if (!phones.length || !ids.length) return;
+    this._sysPushT = true;
+    h.callApi('POST', 'config/automation/config/zuhause_systemwarnung', {
+      id: 'zuhause_systemwarnung', alias: 'Zuhause: Systemwarnung', description: 'Angelegt vom Zuhause-Dashboard. Meldet, wenn wichtige Geräte 15 Minuten keine Werte liefern.', mode: 'queued',
+      triggers: [{ trigger: 'state', entity_id: ids, to: ['unavailable', 'unknown'], for: { minutes: 15 } }],
+      actions: phones.map(p => ({ action: 'notify.' + p, data: { title: 'Zuhause: Systemwarnung', message: '{{ trigger.to_state.name }} liefert seit 15 Minuten keine Werte.' } })),
+    }).then(() => { L.sysV = 1; this._save(); }).catch(() => { this._sysPushT = false; });
+  }
+
   _update() {
     const c = this._cfg, k = this._k;
+    this._sysCheck();
     const h = new Date().getHours();
     this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
     this._renderNotif();
