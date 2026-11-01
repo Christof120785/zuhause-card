@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.25.0';
+const VERSION = '2.26.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -673,7 +673,7 @@ class ZuhauseCard extends HTMLElement {
       }
       if (t.dataset.merge && this._lay) { this._lay.merge[t.dataset.merge] = t.value; this._save(); this._roomSig = null; this._renderRooms(); }
       if (t.dataset.akey && this._lay) { const L = this._lay; L.alarm_key = L.alarm_key || {}; const v = parseInt(t.value, 10); if (v >= 1 && v <= 50) L.alarm_key[t.dataset.akey] = v; else delete L.alarm_key[t.dataset.akey]; this._save(); this._renderAlarm(); }
-      if (t.dataset.boostmin) { const v = Math.max(1, Math.min(240, +t.value || 30)); this._lay.boost_min = v; this._save(); }
+      if (t.dataset.boostmin) { const v = Math.max(1, Math.min(240, +t.value || 120)); this._lay.boost_min = v; this._save(); }
       if (t.dataset.dim || t.dataset.pos) this._busy = Date.now() + 1500;
     });
     root.addEventListener('click', e => {
@@ -764,7 +764,7 @@ class ZuhauseCard extends HTMLElement {
 
   // ---------- Anordnung (gespeichert in Home Assistant, pro Benutzer) ----------
   async _loadLayout() {
-    this._lay = { order: [], hidden: [], merge: {}, names: {}, dev: {}, boost: {}, boost_min: 30 };
+    this._lay = { order: [], hidden: [], merge: {}, names: {}, dev: {}, boost: {}, boost_min: 120 };
     try {
       const r = await this._hass.callWS({ type: 'frontend/get_user_data', key: 'zuhause-card' });
       if (r && r.value) Object.assign(this._lay, r.value);
@@ -782,6 +782,8 @@ class ZuhauseCard extends HTMLElement {
       if (o && o.includes('sec')) { o.splice(o.indexOf('sec'), 1); o.push('sec'); }
       this._save();
     }
+    // ab v2.26.0 dauert ein Boost standardmäßig 2 Stunden
+    if (!this._lay.boost2h) { this._lay.boost2h = true; if (this._lay.boost_min < 120) this._lay.boost_min = 120; this._save(); }
     this._roomSig = null;
     if (this._built) this._update();
   }
@@ -989,9 +991,11 @@ class ZuhauseCard extends HTMLElement {
 
   // Boost-Restzeit: Start merkt sich die Karte, Dauer stellst du bei "Anordnen" ein
   _boostInfo(list) {
-    const run = list.filter(x => this._boosting(x));
+    const bis = this._boostBis(), run = list.filter(x => this._boosting(x) || bis[x.entity_id] > Date.now() / 1000);
     if (!run.length) return null;
-    const lay = this._lay || { boost: {}, boost_min: 30 };
+    const ends = run.map(x => bis[x.entity_id]).filter(Boolean);
+    if (ends.length) { const left = Math.ceil((Math.max(...ends) - Date.now() / 1000) / 60); return left > 0 ? (left > 90 ? `noch ${Math.floor(left / 60)} h${left % 60 ? ` ${left % 60} min` : ''}` : `noch ${left} min`) : 'läuft'; }
+    const lay = this._lay || { boost: {}, boost_min: 120 };
     let changed = false;
     run.forEach(x => { if (!lay.boost[x.entity_id]) { lay.boost[x.entity_id] = Date.now(); changed = true; } });
     if (changed && this._lay) this._save();
@@ -1005,10 +1009,64 @@ class ZuhauseCard extends HTMLElement {
     Object.keys(this._lay.boost).forEach(id => { const s = this._s(id); if (!s || !this._boosting(s)) { delete this._lay.boost[id]; ch = true; } });
     if (ch) this._save();
   }
-  _startBoost(ids) {
+  // Homematic beendet den Boost nach seiner eigenen kurzen Dauer. Damit er so lange läuft wie eingestellt,
+  // steht das Ende in input_text.zuhause_boost_bis ("Ende:Index,Index|…") und eine Automation schaltet ihn bis dahin wieder ein
+  _boostIds() { return Object.values(this._hass.states).filter(s => s.entity_id.startsWith('climate.') && this._canBoost(s)).map(s => s.entity_id).sort(); }
+  _boostBis() {
+    const s = this._s('input_text.zuhause_boost_bis'), ids = this._boostIds(), m = {};
+    if (!s) return m;
+    String(s.state).split('|').forEach(g => { const [t, l] = g.split(':'); if (l) l.split(',').forEach(i => { if (ids[+i]) m[ids[+i]] = +t; }); });
+    return m;
+  }
+  _boostWrite(m) {
+    const ids = this._boostIds(), now = Date.now() / 1000, g = {};
+    Object.entries(m).forEach(([e, t]) => { const i = ids.indexOf(e); if (i >= 0 && t > now) (g[t] = g[t] || []).push(i); });
+    const v = Object.entries(g).map(([t, l]) => t + ':' + l.join(',')).join('|').slice(0, 255);
+    this._hass.callService('input_text', 'set_value', { entity_id: 'input_text.zuhause_boost_bis', value: v });
+  }
+  _startBoost(ids, more) {
     ids.forEach(id => { this._lay.boost[id] = Date.now(); });
     this._save();
     this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'boost' });
+    if (!this._s('input_text.zuhause_boost_bis')) return;
+    // erster Druck: eingestellte Dauer (Standard 2 h); "Verlängern": 1 Stunde dazu, höchstens 6 Stunden ab jetzt
+    const m = this._boostBis(), now = Math.floor(Date.now() / 1000), cur = Math.max(now, ...ids.map(id => m[id] || 0));
+    const end = more ? Math.min(cur + 3600, now + 6 * 3600) : now + (this._lay.boost_min || 120) * 60;
+    ids.forEach(id => { m[id] = end; });
+    this._boostWrite(m);
+  }
+  _stopBoost(ids) {
+    const m = this._boostBis(); ids.forEach(id => delete m[id]);
+    if (this._s('input_text.zuhause_boost_bis')) this._boostWrite(m);
+    this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'none' });
+  }
+  async _boostSetup() {
+    const h = this._hass, L = this._lay;
+    if (this._boostT || !L || !(h.user && h.user.is_admin)) return;
+    const ids = this._boostIds(), key = ids.join();
+    if (!ids.length || (h.states['input_text.zuhause_boost_bis'] && L.boostIds === key)) return;
+    this._boostT = true;
+    try {
+      if (!h.states['input_text.zuhause_boost_bis']) await h.callWS({ type: 'input_text/create', name: 'Zuhause Boost bis', max: 255, icon: 'mdi:radiator' });
+      const pick = (cmp, want) => `{% set ns = namespace(l=[]) %}{% for g in raw.split('|') if ':' in g %}{% if g.split(':')[0] | int(0) ${cmp} now().timestamp() %}{% for i in g.split(':')[1].split(',') if 0 <= i | int(-1) < ids | length %}{% set e = ids[i | int] %}{% if (state_attr(e, 'preset_mode') == 'boost') == ${want} %}{% set ns.l = ns.l + [e] %}{% endif %}{% endfor %}{% endif %}{% endfor %}{{ ns.l }}`;
+      await h.callApi('POST', 'config/automation/config/zuhause_boost_halten', {
+        id: 'zuhause_boost_halten', alias: 'Zuhause: Boost halten', mode: 'single',
+        description: 'Angelegt vom Zuhause-Dashboard. Hält den Heizungs-Boost bis zur Endzeit in "Zuhause Boost bis" aktiv und beendet ihn danach.',
+        triggers: [{ trigger: 'time_pattern', minutes: '/1' }, { trigger: 'state', entity_id: 'input_text.zuhause_boost_bis' }],
+        variables: {
+          ids, raw: "{{ states('input_text.zuhause_boost_bis') }}",
+          an: pick('>', 'false'), aus: pick('<=', 'true'),
+          rest: "{% set ns = namespace(l=[]) %}{% for g in raw.split('|') if ':' in g and g.split(':')[0] | int(0) > now().timestamp() %}{% set ns.l = ns.l + [g] %}{% endfor %}{{ ns.l | join('|') }}",
+        },
+        actions: [
+          { if: [{ condition: 'template', value_template: '{{ an | length > 0 }}' }], then: [{ action: 'climate.set_preset_mode', target: { entity_id: '{{ an }}' }, data: { preset_mode: 'boost' } }] },
+          { if: [{ condition: 'template', value_template: '{{ aus | length > 0 }}' }], then: [{ action: 'climate.set_preset_mode', target: { entity_id: '{{ aus }}' }, data: { preset_mode: 'none' } }] },
+          { if: [{ condition: 'template', value_template: "{{ raw not in ['unknown', 'unavailable'] and rest != raw }}" }],
+            then: [{ action: 'input_text.set_value', target: { entity_id: 'input_text.zuhause_boost_bis' }, data: { value: '{{ rest }}' } }] },
+        ],
+      });
+      L.boostIds = key; this._save();
+    } catch (e) { console.warn('zuhause-card: Boost-Automation', e); this._boostT = false; }
   }
 
   // ---------- Lampen-Karussell ----------
@@ -1413,10 +1471,10 @@ class ZuhauseCard extends HTMLElement {
     }
     if (d.room) { this._open = this._open === d.room ? null : d.room; return done(); }
     if (d.cv) { const [a, id] = d.cv.split('|'); h.callService('cover', a + '_cover', { entity_id: id }); return true; }
-    if (d.boost) { const r = room(d.boost); if (r) this._startBoost(r.climate.filter(x => this._canBoost(x)).map(x => x.entity_id)); return done(); }
+    if (d.boost) { const r = room(d.boost); if (r) { const c = r.climate.filter(x => this._canBoost(x)); this._startBoost(c.map(x => x.entity_id), !!this._boostInfo(c)); } return done(); }
     if (d.boostoff) {
-      const ids = (room(d.boostoff) || { climate: [] }).climate.filter(x => this._boosting(x)).map(x => x.entity_id);
-      if (ids.length) h.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'none' });
+      const ids = (room(d.boostoff) || { climate: [] }).climate.filter(x => this._canBoost(x)).map(x => x.entity_id);
+      if (ids.length) this._stopBoost(ids);
       return true;
     }
     if (d.q) {
@@ -2021,6 +2079,7 @@ class ZuhauseCard extends HTMLElement {
     const c = this._cfg, k = this._k;
     this._sysCheck();
     this._wizArea();
+    this._boostSetup();
     const h = new Date().getHours();
     this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
     this._renderNotif();
