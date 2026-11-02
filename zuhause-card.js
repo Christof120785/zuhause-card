@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.26.0';
+const VERSION = '2.27.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1504,6 +1504,7 @@ class ZuhauseCard extends HTMLElement {
         if (key) h.callService('homematicip_local', 'set_device_value', { device_address: key.addr, channel: key.ch, parameter: 'PRESS_SHORT', value: 'true', value_type: 'boolean' });
         else if (id) h.callService('button', 'press', { entity_id: id });
       }
+      if (this._s('input_button.zuhause_haustuer_knopf')) h.callService('input_button', 'press', { entity_id: 'input_button.zuhause_haustuer_knopf' });
       this._doorAsk = false; this._doorSent = Date.now(); this._renderAlarm();
       setTimeout(() => this._renderAlarm(), 6500);
       return true;
@@ -1718,7 +1719,8 @@ class ZuhauseCard extends HTMLElement {
     return { phones, items: [
       { id: 'zuhause_alarm_status', name: 'Alarmanlage scharf / unscharf', ids: pres ? [pres] : [] },
       { id: 'zuhause_alarm_ausgeloest', name: 'Alarm ausgelöst', ids: alarm ? [alarm.entity_id] : [], loud: true },
-      { id: 'zuhause_haustuer', name: 'Haustür geöffnet (Türöffner)', ids: door ? [door.entity_id] : [] },
+      // nur wenn jemand im Dashboard auf "Haustür öffnen" drückt, nicht bei jedem Öffnen der Tür (Christof, 02.11.2026)
+      { id: 'zuhause_haustuer', name: 'Haustür über Dashboard geöffnet', ids: door || this._doorKey() ? ['input_button.zuhause_haustuer_knopf'] : [] },
       { id: 'zuhause_carportlicht', name: 'Carportlicht an', ids: carport ? [carport.entity_id] : [] },
       { id: 'zuhause_wasser', name: 'Wasser im Keller', ids: water.map(x => x.entity_id), loud: true },
       { id: 'zuhause_zu_heiss', name: 'Zu heiß (über 35 °C)', ids: temps.map(x => x.entity_id), loud: true },
@@ -1734,6 +1736,8 @@ class ZuhauseCard extends HTMLElement {
         default: send('Alarmanlage', 'Alarmanlage ist unscharf') }] };
     if (it.id === 'zuhause_zu_heiss') return { ...base, mode: 'single', triggers: [{ trigger: 'numeric_state', entity_id: it.ids, attribute: 'current_temperature', above: 35 }],
       actions: [...send('Zu heiß!', "{{ state_attr(trigger.entity_id, 'friendly_name') }}: {{ state_attr(trigger.entity_id, 'current_temperature') }} °C"), { delay: '00:30:00' }] };
+    if (it.id === 'zuhause_haustuer') return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, not_from: ['unavailable', 'unknown'] }],
+      actions: send('Haustür', "{% set p = states.person | selectattr('attributes.user_id', 'eq', trigger.to_state.context.user_id) | map(attribute='name') | list %}Haustür über das Dashboard geöffnet{{ ' von ' ~ p[0] if p else '' }}") };
     const txt = { zuhause_alarm_ausgeloest: ['Alarm!', 'Alarm ausgelöst!'], zuhause_haustuer: ['Haustür', 'Haustür auf'], zuhause_carportlicht: ['Carportlicht', 'Carportlicht an'], zuhause_wasser: ['Wasser im Keller', 'Wasser im Keller!'] }[it.id];
     return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true', 'ausgelöst'], not_from: ['unavailable', 'unknown'] }], actions: send(...txt) };
   }
@@ -1757,11 +1761,26 @@ class ZuhauseCard extends HTMLElement {
   // Einmalig: Christof will nur Alarm ausgelöst, zu heiß, Haustür und Carportlicht als Meldung (29.10.2026)
   _notifDefaults() {
     const h = this._hass, L = this._lay;
+    this._notifDoor();
     if (!L || L.nOff1 || !(h.user && h.user.is_admin)) return;
     const off = Object.values(h.states).filter(x => x.entity_id.startsWith('automation.') && ['zuhause_alarm_status', 'zuhause_wasser'].includes(x.attributes.id));
     if (!off.length) return;
     L.nOff1 = 1; this._save();
     h.callService('automation', 'turn_off', { entity_id: off.map(x => x.entity_id) });
+  }
+  // Haustür-Meldung hängt seit v2.27.0 am Dashboard-Knopf (input_button) statt am Türöffner-Schalter
+  async _notifDoor() {
+    const h = this._hass, L = this._lay;
+    if (!L || L.nDoor2 || this._nDoorT || !(h.user && h.user.is_admin)) return;
+    const plan = this._notifPlan(), it = plan.items.find(x => x.id === 'zuhause_haustuer');
+    if (!it || !it.ids.length || !plan.phones.length) return;
+    this._nDoorT = true;
+    try {
+      if (!h.states['input_button.zuhause_haustuer_knopf']) await h.callWS({ type: 'input_button/create', name: 'Zuhause Haustuer Knopf', icon: 'mdi:door-open' });
+      const had = Object.values(h.states).some(x => x.entity_id.startsWith('automation.') && x.attributes.id === 'zuhause_haustuer');
+      if (had) await h.callApi('POST', 'config/automation/config/zuhause_haustuer', this._notifCfg(it, plan.phones));
+      L.nDoor2 = 1; this._save();
+    } catch (e) { console.warn('zuhause-card: Haustür-Meldung', e); this._nDoorT = false; }
   }
   _renderNotif() {
     this._notifDefaults();
