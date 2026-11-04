@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.28.0';
+const VERSION = '2.28.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -750,7 +750,7 @@ class ZuhauseCard extends HTMLElement {
       const d = ent[id] && ent[id].device_id;
       if (d ? used.has(d) : false) return;
       if (d) used.add(d);
-      const fn = (st[id].attributes.friendly_name || id).replace(/\s*(fluent|flüssig|balanced|ausgewogen|clear|klar|sub|main|haupt)\w*\s*$/i, '').trim();
+      const fn = (st[id].attributes.friendly_name || id).replace(/\s*(fluent|flüssig|balanced|ausgewogen|clear|klar|sub|main|haupt|standard|hochaufl|niedrigaufl|aufl)\w*\s*$/i, '').trim();
       list.push({ name: fn, brand: 'Kamera', id });
     });
     return list;
