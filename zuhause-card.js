@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.28.1';
+const VERSION = '2.29.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1051,6 +1051,33 @@ class ZuhauseCard extends HTMLElement {
     if (this._s('input_text.zuhause_boost_bis')) this._boostWrite(m);
     this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'none' });
   }
+  // ---------- Bewegung schaltet Steckdosen eines Raums ----------
+  _bewSlug(id) { return 'zuhause_bew_' + String(id).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
+  _bewAuto(id) { const k = this._bewSlug(id); return Object.values(this._hass.states).find(x => x.entity_id.startsWith('automation.') && x.attributes.id === k) || null; }
+  async _bewToggle(r) {
+    const h = this._hass, au = this._bewAuto(r.id);
+    try {
+      if (au) { await h.callService('automation', 'toggle', { entity_id: au.entity_id }); return; }
+      const mot = Object.values(h.states).filter(x => /^binary_sensor\./.test(x.entity_id) && /occupancy|motion|presence/.test(x.attributes.device_class || '') && this._areaOf(x.entity_id) === r.id).map(x => x.entity_id);
+      const sw = r.sw.map(x => x.entity_id);
+      if (!mot.length || !sw.length) return;
+      const id = this._bewSlug(r.id), q = l => l.map(e => `'${e}'`).join(', ');
+      await h.callApi('POST', 'config/automation/config/' + id, {
+        id, alias: `Zuhause: Bewegungslicht ${r.name}`, mode: 'restart',
+        description: 'Angelegt vom Zuhause-Dashboard. Schaltet die Steckdosen des Raums bei Bewegung ein und 3 Minuten nach der letzten Bewegung wieder aus.',
+        triggers: [{ trigger: 'state', entity_id: mot, to: 'on' }],
+        conditions: [],
+        actions: [
+          { action: 'homeassistant.turn_on', target: { entity_id: sw } },
+          { wait_template: `{{ [${q(mot)}] | select('is_state', 'on') | list | count == 0 }}` },
+          { delay: { minutes: 3 } },
+          { action: 'homeassistant.turn_off', target: { entity_id: sw } },
+        ],
+      });
+      await h.callService('automation', 'reload', {});
+    } catch (e) { this._sysMsg = 'Bewegungslicht hat nicht geklappt: ' + ((e && e.message) || e); }
+    this._roomSig = null; this._renderRooms(); setTimeout(() => { this._roomSig = null; this._renderRooms(); }, 1500);
+  }
   async _boostSetup() {
     const h = this._hass, L = this._lay;
     if (this._boostT || !L || !(h.user && h.user.is_admin)) return;
@@ -1417,6 +1444,11 @@ class ZuhauseCard extends HTMLElement {
     if (mot.length) {
       const on = mot.some(s => s.state === 'on');
       h += `<div class="row"><div class="ico">${svg('bulb')}</div><div class="txt" data-more="${mot[0].entity_id}"><b>Bewegung</b><span>${on ? 'erkannt' : 'keine'}</span></div></div>`;
+      // Steckdosen des Raums bei Bewegung einschalten (Automation wird in Home Assistant angelegt, 3 Minuten Nachlauf)
+      if (r.sw.length && this._hass.user && this._hass.user.is_admin) {
+        const au = this._bewAuto(r.id);
+        h += `<div class="row"><div class="ico">${svg('plug')}</div><div class="txt"><b>Bei Bewegung einschalten</b><span>${au ? (au.state === 'on' ? 'An · Steckdose geht 3 Min. nach der letzten Bewegung aus' : 'Aus') : 'Noch nicht eingerichtet'}</span></div><button class="tg" role="switch" aria-label="Bei Bewegung einschalten ${r.name}" aria-checked="${!!au && au.state === 'on'}" data-bew="${r.id}"></button></div>`;
+      }
     }
     if (r.fn.length) {
       h += '<div class="sect">Funktionen</div>';
@@ -1482,6 +1514,7 @@ class ZuhauseCard extends HTMLElement {
     }
     if (d.room) { this._open = this._open === d.room ? null : d.room; return done(); }
     if (d.cv) { const [a, id] = d.cv.split('|'); h.callService('cover', a + '_cover', { entity_id: id }); return true; }
+    if (d.bew) { const r = room(d.bew); if (r) this._bewToggle(r); return true; }
     if (d.boost) { const r = room(d.boost); if (r) { const c = r.climate.filter(x => this._canBoost(x)); this._startBoost(c.map(x => x.entity_id), !!this._boostInfo(c)); } return done(); }
     if (d.boostoff) {
       const ids = (room(d.boostoff) || { climate: [] }).climate.filter(x => this._canBoost(x)).map(x => x.entity_id);
