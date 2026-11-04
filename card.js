@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.27.0';
+const VERSION = '2.27.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1995,7 +1995,11 @@ class ZuhauseCard extends HTMLElement {
       // Geräte ohne Werte oder mit veralteten Werten
       this._sysEnts().forEach(({ id, age }) => {
         const s = h.states[id];
-        if (/^(unavailable|unknown)$/.test(s.state)) bad.push(`${nm(id)}: keine Werte`);
+        if (/^(unavailable|unknown)$/.test(s.state)) {
+          // Prognosen (Forecast.Solar u. ä.) haben öfter kurze Aussetzer: erst nach 2 Stunden ohne Werte warnen
+          const kurz = /forecast|prognose/i.test(id + ' ' + nm(id)) && s.last_changed && now - Date.parse(s.last_changed) < 120 * 60000;
+          if (!kurz) bad.push(`${nm(id)}: keine Werte`);
+        }
         else if (age && s.last_reported && now - Date.parse(s.last_reported) > age * 60000) bad.push(`${nm(id)}: seit ${Math.round((now - Date.parse(s.last_reported)) / 60000)} min keine neuen Werte`);
       });
       // Vom Dashboard angelegte Automationen mit Fehler
