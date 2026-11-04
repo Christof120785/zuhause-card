@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.27.1';
+const VERSION = '2.28.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -734,7 +734,7 @@ class ZuhauseCard extends HTMLElement {
   _camList() {
     const st = this._hass.states;
     const all = Object.keys(st).filter(id => id.startsWith('camera.')).sort();
-    return this._cfg.cameras.map(m => {
+    const list = this._cfg.cameras.map(m => {
       let id = m.entity && st[m.entity] ? m.entity : null;
       if (!id) {
         const f = this._key(m);
@@ -743,6 +743,17 @@ class ZuhauseCard extends HTMLElement {
       }
       return Object.assign({}, m, { id });
     }).filter(m => m.id && this._stream(m.id));
+    // weitere Kameras mit Livebild (z. B. neu hinzugekommene Reolink) automatisch dazunehmen, je Gerät nur eine
+    const ent = this._hass.entities || {}, used = new Set(), seen = new Set(list.map(m => m.id));
+    list.forEach(m => { const d = ent[m.id] && ent[m.id].device_id; if (d) used.add(d); });
+    all.filter(id => !seen.has(id) && !/clear|klar|snapshot/.test(id) && this._stream(id)).forEach(id => {
+      const d = ent[id] && ent[id].device_id;
+      if (d ? used.has(d) : false) return;
+      if (d) used.add(d);
+      const fn = (st[id].attributes.friendly_name || id).replace(/\s*(fluent|flüssig|balanced|ausgewogen|clear|klar|sub|main|haupt)\w*\s*$/i, '').trim();
+      list.push({ name: fn, brand: 'Kamera', id });
+    });
+    return list;
   }
 
   // ---------- Anordnung (gespeichert in Home Assistant, pro Benutzer) ----------
