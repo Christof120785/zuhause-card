@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.29.0';
+const VERSION = '2.29.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1766,6 +1766,8 @@ class ZuhauseCard extends HTMLElement {
     if (it.id === 'zuhause_haustuer') return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, not_from: ['unavailable', 'unknown'] }],
       actions: send('Haustür', "{% set p = states.person | selectattr('attributes.user_id', 'eq', trigger.to_state.context.user_id) | map(attribute='name') | list %}Haustür über das Dashboard geöffnet{{ ' von ' ~ p[0] if p else '' }}") };
     const txt = { zuhause_alarm_ausgeloest: ['Alarm!', 'Alarm ausgelöst!'], zuhause_haustuer: ['Haustür', 'Haustür auf'], zuhause_carportlicht: ['Carportlicht', 'Carportlicht an'], zuhause_wasser: ['Wasser im Keller', 'Wasser im Keller!'] }[it.id];
+    // Carportlicht schaltet per Bewegungsmelder oft: höchstens eine Meldung pro Stunde
+    if (it.id === 'zuhause_carportlicht') return { ...base, mode: 'single', triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true'], not_from: ['unavailable', 'unknown'] }], actions: [...send(...txt), { delay: '01:00:00' }] };
     return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true', 'ausgelöst'], not_from: ['unavailable', 'unknown'] }], actions: send(...txt) };
   }
   async _notifAction(what) {
@@ -1788,12 +1790,25 @@ class ZuhauseCard extends HTMLElement {
   // Einmalig: Christof will nur Alarm ausgelöst, zu heiß, Haustür und Carportlicht als Meldung (29.10.2026)
   _notifDefaults() {
     const h = this._hass, L = this._lay;
-    this._notifDoor();
+    this._notifDoor(); this._notifCarport();
     if (!L || L.nOff1 || !(h.user && h.user.is_admin)) return;
     const off = Object.values(h.states).filter(x => x.entity_id.startsWith('automation.') && ['zuhause_alarm_status', 'zuhause_wasser'].includes(x.attributes.id));
     if (!off.length) return;
     L.nOff1 = 1; this._save();
     h.callService('automation', 'turn_off', { entity_id: off.map(x => x.entity_id) });
+  }
+  // Carportlicht-Meldung einmalig mit Pause von einer Stunde neu anlegen (v2.29.1)
+  async _notifCarport() {
+    const h = this._hass, L = this._lay;
+    if (!L || L.nCarp1 || this._nCarpT || !(h.user && h.user.is_admin)) return;
+    const plan = this._notifPlan(), it = plan.items.find(x => x.id === 'zuhause_carportlicht');
+    if (!it || !it.ids.length || !plan.phones.length) return;
+    this._nCarpT = true;
+    try {
+      const had = Object.values(h.states).some(x => x.entity_id.startsWith('automation.') && x.attributes.id === 'zuhause_carportlicht');
+      if (had) await h.callApi('POST', 'config/automation/config/zuhause_carportlicht', this._notifCfg(it, plan.phones));
+      L.nCarp1 = 1; this._save();
+    } catch (e) { console.warn('zuhause-card: Carportlicht-Meldung', e); this._nCarpT = false; }
   }
   // Haustür-Meldung hängt seit v2.27.0 am Dashboard-Knopf (input_button) statt am Türöffner-Schalter
   async _notifDoor() {
@@ -2098,16 +2113,19 @@ class ZuhauseCard extends HTMLElement {
   // Push aufs Handy, wenn wichtige Geräte 15 Minuten keine Werte liefern (läuft in Home Assistant, auch ohne offenes Dashboard)
   _sysPush() {
     const h = this._hass, L = this._lay;
-    if (this._sysPushT || !L || L.sysV === 1) return;
+    if (this._sysPushT || !L || L.sysV === 2) return;
     const phones = Object.keys((h.services && h.services.notify) || {}).filter(x => x.startsWith('mobile_app_'));
-    const ids = this._sysEnts().map(x => x.id);
-    if (!phones.length || !ids.length) return;
+    const all = this._sysEnts().map(x => x.id);
+    // Wetter-/Prognose-Daten fallen öfter kurz aus: erst nach 2 Stunden melden
+    const slow = all.filter(id => /forecast|prognose|weather\./i.test(id + ' ' + ((h.states[id] && h.states[id].attributes.friendly_name) || '')));
+    const ids = all.filter(id => !slow.includes(id));
+    if (!phones.length || !all.length) return;
     this._sysPushT = true;
     h.callApi('POST', 'config/automation/config/zuhause_systemwarnung', {
       id: 'zuhause_systemwarnung', alias: 'Zuhause: Systemwarnung', description: 'Angelegt vom Zuhause-Dashboard. Meldet, wenn wichtige Geräte 15 Minuten keine Werte liefern.', mode: 'queued',
-      triggers: [{ trigger: 'state', entity_id: ids, to: ['unavailable', 'unknown'], for: { minutes: 15 } }],
-      actions: phones.map(p => ({ action: 'notify.' + p, data: { title: 'Zuhause: Systemwarnung', message: '{{ trigger.to_state.name }} liefert seit 15 Minuten keine Werte.' } })),
-    }).then(() => { L.sysV = 1; this._save(); }).catch(() => { this._sysPushT = false; });
+      triggers: [...(ids.length ? [{ trigger: 'state', entity_id: ids, to: ['unavailable', 'unknown'], for: { minutes: 15 } }] : []), ...(slow.length ? [{ trigger: 'state', entity_id: slow, to: ['unavailable', 'unknown'], for: { minutes: 120 } }] : [])],
+      actions: phones.map(p => ({ action: 'notify.' + p, data: { title: 'Zuhause: Systemwarnung', message: '{{ trigger.to_state.name }} liefert seit ' + (slow.length ? '{{ 120 if trigger.entity_id in ' + JSON.stringify(slow) + ' else 15 }}' : '15') + ' Minuten keine Werte.' } })),
+    }).then(() => { L.sysV = 2; this._save(); }).catch(() => { this._sysPushT = false; });
   }
 
   // WiZ-Birnen ohne Bereich einmalig dem Bereich „Flur unten“ zuordnen (Bereich wird bei Bedarf angelegt)
