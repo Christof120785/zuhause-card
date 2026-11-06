@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.29.1';
+const VERSION = '2.29.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1748,13 +1748,13 @@ class ZuhauseCard extends HTMLElement {
       { id: 'zuhause_alarm_ausgeloest', name: 'Alarm ausgelöst', ids: alarm ? [alarm.entity_id] : [], loud: true },
       // nur wenn jemand im Dashboard auf "Haustür öffnen" drückt, nicht bei jedem Öffnen der Tür (Christof, 02.11.2026)
       { id: 'zuhause_haustuer', name: 'Haustür über Dashboard geöffnet', ids: door || this._doorKey() ? ['input_button.zuhause_haustuer_knopf'] : [] },
-      { id: 'zuhause_carportlicht', name: 'Carportlicht an', ids: carport ? [carport.entity_id] : [] },
+      { id: 'zuhause_carportlicht', name: 'Carportlicht an', fast: true, ids: carport ? [carport.entity_id] : [] },
       { id: 'zuhause_wasser', name: 'Wasser im Keller', ids: water.map(x => x.entity_id), loud: true },
       { id: 'zuhause_zu_heiss', name: 'Zu heiß (über 35 °C)', ids: temps.map(x => x.entity_id), loud: true },
     ] };
   }
   _notifCfg(it, phones) {
-    const loud = it.loud ? { priority: 'high', ttl: 0, channel: 'alarm_stream', push: { 'interruption-level': 'time-sensitive', sound: 'default' } } : { push: { sound: 'default' } };
+    const loud = it.fast ? { priority: 'high', ttl: 0, push: { sound: 'default' } } : it.loud ? { priority: 'high', ttl: 0, channel: 'alarm_stream', push: { 'interruption-level': 'time-sensitive', sound: 'default' } } : { push: { sound: 'default' } };
     const send = (title, message) => phones.map(p => ({ action: 'notify.' + p, data: { title, message, data: loud } }));
     const base = { id: it.id, alias: 'Zuhause: ' + it.name, description: 'Angelegt vom Zuhause-Dashboard', mode: 'queued' };
     const nb = { not_from: ['unavailable', 'unknown'], not_to: ['unavailable', 'unknown'] };
@@ -1800,14 +1800,14 @@ class ZuhauseCard extends HTMLElement {
   // Carportlicht-Meldung einmalig mit Pause von einer Stunde neu anlegen (v2.29.1)
   async _notifCarport() {
     const h = this._hass, L = this._lay;
-    if (!L || L.nCarp1 || this._nCarpT || !(h.user && h.user.is_admin)) return;
+    if (!L || L.nCarp2 || this._nCarpT || !(h.user && h.user.is_admin)) return;
     const plan = this._notifPlan(), it = plan.items.find(x => x.id === 'zuhause_carportlicht');
     if (!it || !it.ids.length || !plan.phones.length) return;
     this._nCarpT = true;
     try {
       const had = Object.values(h.states).some(x => x.entity_id.startsWith('automation.') && x.attributes.id === 'zuhause_carportlicht');
       if (had) await h.callApi('POST', 'config/automation/config/zuhause_carportlicht', this._notifCfg(it, plan.phones));
-      L.nCarp1 = 1; this._save();
+      L.nCarp2 = 1; this._save();
     } catch (e) { console.warn('zuhause-card: Carportlicht-Meldung', e); this._nCarpT = false; }
   }
   // Haustür-Meldung hängt seit v2.27.0 am Dashboard-Knopf (input_button) statt am Türöffner-Schalter
