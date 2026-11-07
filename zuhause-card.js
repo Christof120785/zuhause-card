@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.37.1';
+const VERSION = '2.38.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1355,6 +1355,9 @@ class ZuhauseCard extends HTMLElement {
     return { order, hidden: (t.hidden || []).filter(x => x !== 'home') };
   }
   _page() {
+    // fest eingestellte Seite (Dashboard-Reiter oben in Home Assistant): page: raeume, kameras, vac, energie, start oder alles
+    const fp = this._cfg && this._cfg.page;
+    if (fp && PAGES.some(x => x[0] === fp)) return (this._pageSel = fp);
     if (this._pageSel) return this._pageSel;
     let v = null; try { v = localStorage.getItem('zuhause-card-page'); } catch (e) { /* ohne Speicher */ }
     if (!PAGES.some(x => x[0] === v)) v = window.innerWidth >= 1100 ? 'alles' : 'start';
@@ -1371,7 +1374,7 @@ class ZuhauseCard extends HTMLElement {
     if (sig === this._tileSig) return;
     this._tileSig = sig;
     const vis = order.filter(x => inPage(x) && (arr || !hidden.includes(x)));
-    const pb = this._k && this._k.pages; if (pb) { pb.hidden = arr; pb.querySelectorAll('[data-page]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.page === pg))); }
+    const pb = this._k && this._k.pages; if (pb) { pb.hidden = arr || !!(this._cfg && this._cfg.page); pb.querySelectorAll('[data-page]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.page === pg))); }
     // Breiten so verteilen, dass keine Lücke bleibt, wenn eine Kachel fehlt
     const pack = (cols, w) => {
       const out = {}; let row = [], sum = 0;
