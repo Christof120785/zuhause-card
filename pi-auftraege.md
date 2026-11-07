@@ -12,6 +12,14 @@ Regeln für alle Aufträge:
 
 ---
 
+## A8 · 2026-11-07 · WiZ-Lampen Flur unten: Helligkeit beim Einschalten · Status: offen
+
+Die beiden WiZ-Lampen im Flur unten merken sich die Helligkeit aus der WiZ-App nicht, wenn Home Assistant sie schaltet (sie gehen mit der letzten oder voller Helligkeit an). Gewünscht sind 35 % als Standard.
+1. Die Bewegungs-Automation Flur unten setzt beim Einschalten der WiZ-Lampen die Helligkeit auf den Wert des Helfers `input_number.bewegung_flur_unten_helligkeit` (1 bis 100 %, `brightness_pct` im Dienstaufruf `light.turn_on`). Setze den Helfer auf 35.
+2. Das gilt nur für das Einschalten durch Bewegung. Schaltet Christof die Lampen von Hand ein, ändert die Automation die Helligkeit nicht.
+3. Die Shelly-Steckdose hat keine Helligkeit, dort ändert sich nichts.
+Hängt es an A6, mache es zusammen mit A6.
+
 ## A7 · 2026-11-07 · Nachlaufzeit in Sekunden · Status: offen
 
 Die Nachlaufzeit des Bewegungslichts Flur unten soll in Sekunden einstellbar sein, 0 bis 120.
