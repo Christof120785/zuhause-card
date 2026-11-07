@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.35.0';
+const VERSION = '2.37.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -43,6 +43,14 @@ const TILES = {
 };
 
 // Blätter (Tabs) unter der Begrüßung: Schlüssel, Name, enthaltene Kacheln (null = alle)
+const PG_ICO = {
+  start: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
+  raeume: 'M3 3h8v8H3zm0 10h8v8H3zM13 3h8v8h-8zm0 10h8v8h-8z',
+  kameras: 'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z',
+  vac: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 6a4 4 0 1 1 0 8 4 4 0 0 1 0-8z',
+  energie: 'M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z',
+  alles: 'M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z'
+};
 const PAGES = [['start', 'Start', ['energy', 'wx', 'waste', 'app']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
   ['vac', 'Saugroboter', ['vac']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
 
@@ -390,8 +398,8 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .vac .vm{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .vac .vphoto{display:block;width:100%;max-width:210px;height:auto;margin:6px auto 2px;border-radius:16px;background:#fff}.vac .vart{width:100%;max-width:230px;height:auto;margin:6px auto 2px}.vac .vart .rb{transform-origin:112px 78px}.vac .cl .rb{animation:vspin 3s linear infinite}.vac .cl .ld{animation:vspin 1.6s linear infinite;transform-origin:112px 78px}@keyframes vspin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.vac .cl .rb,.vac .cl .ld{animation:none}}
 .pg{display:flex;gap:2px;overflow-x:auto;-webkit-mask-image:linear-gradient(90deg,#000 90%,transparent);mask-image:linear-gradient(90deg,#000 90%,transparent);scrollbar-width:none;border-bottom:1px solid var(--line);padding:0 2px}.pg::-webkit-scrollbar{display:none}
-.pg button{all:unset;cursor:pointer;flex:none;padding:11px 12px;font-size:14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
-.pg[hidden]{display:none}
+.pg button{all:unset;display:inline-flex;align-items:center;gap:7px;cursor:pointer;flex:none;padding:11px 12px;font-size:14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.pg[hidden]{display:none}@media (max-width:600px){.pg button:not([aria-selected="true"]) span{display:none}.pg button{padding:11px 14px}}
 .pg button[aria-selected="true"]{color:var(--sun);border-bottom-color:var(--sun)}.pg button:focus-visible{outline:2px solid var(--sun);outline-offset:-2px;border-radius:8px}
 .bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
@@ -553,7 +561,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
           <div data-k="alarm"></div></div>
       </section>
-      <nav class="pg wide" role="tablist" aria-label="Blätter" data-k="pages">${PAGES.map(([k, n]) => `<button role="tab" data-page="${k}" aria-selected="false">${n}</button>`).join('')}</nav>
+      <nav class="pg wide" role="tablist" aria-label="Blätter" data-k="pages">${PAGES.map(([k, n]) => `<button role="tab" data-page="${k}" aria-label="${n}" title="${n}" aria-selected="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="${PG_ICO[k]}"/></svg><span>${n}</span></button>`).join('')}</nav>
 
       <section class="card energy" data-sec="energy">
         <div class="eyebrow"><span>Energie &amp; Wallbox</span><span>● Live</span></div>
@@ -723,6 +731,7 @@ class ZuhauseCard extends HTMLElement {
       if (e.target.closest('[data-syshide]')) { this._sysHide = [...this._sys.bad, ...this._sys.hint].join('|'); this._renderSys(); return; }
       const wp = e.target.closest('[data-wbprio]');
       if (wp) { this._hass.callService('input_boolean', wp.dataset.wbprio === 'auto' ? 'turn_on' : 'turn_off', { entity_id: 'input_boolean.zuhause_solar_prioritaet_auto' }); return; }
+      if (e.target.closest('[data-wbsperre]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_anker_entladen_sperren' }); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
@@ -2161,7 +2170,13 @@ class ZuhauseCard extends HTMLElement {
     const pvl = n.num ? `☀ PV-Laden<small class="segs-s">${n.share > 0 ? `+ ${n.share} % Netz` : 'nur Sonne'}</small>` : '☀ PV-Laden';
     const pr = this._wbPrio();
     const prHtml = `<div class="wbprio"><div class="wbprio-h"><b>Solar zuerst für</b><span>${pr.note}</span></div><div class="segs" style="margin-top:6px"><button class="seg${pr.auto ? '' : ' on'}" data-wbprio="bat" ${pr.bool ? '' : 'disabled'}>🔋 Batterie</button><button class="seg${pr.auto ? ' on' : ''}" data-wbprio="auto" ${pr.bool ? '' : 'disabled'}>🚗 Auto</button></div></div>`;
-    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>` + prHtml
+    const sp = this._hass.states['input_boolean.zuhause_anker_entladen_sperren'];
+    if (!sp && !this._wbSperT && this._hass.user && this._hass.user.is_admin) {
+      this._wbSperT = true;
+      this._hass.callWS({ type: 'input_boolean/create', name: 'Zuhause Anker Entladen sperren', icon: 'mdi:battery-lock' }).catch(e => console.warn('zuhause-card: Entladen sperren', e));
+    }
+    const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
+    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>` + prHtml + spHtml
       + (this._wbNOpen && n.num ? `<div class="wbn"><div class="wbn-h"><b>Netzanteil beim PV-Laden</b><span data-k2="wbnv">${n.share} %</span></div>
         <input type="range" min="0" max="100" step="10" value="${n.share}" data-wbn="${n.num.entity_id}" aria-label="Netzanteil">
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
