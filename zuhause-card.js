@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.31.1';
+const VERSION = '2.32.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -41,6 +41,10 @@ const TILES = {
   energy: ['Energie & Wallbox', 8, 1], cams: ['Kameras', 4, 1], home: ['Räume', 8, 2], waste: ['Müllabfuhr', 4, 1],
   wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1]
 };
+
+// Blätter (Tabs) unter der Begrüßung: Schlüssel, Name, enthaltene Kacheln (null = alle)
+const PAGES = [['start', 'Start', ['energy', 'wx', 'waste']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
+  ['vac', 'Saugroboter', ['vac']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
 
 // Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
 const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /^wohnzimmer( gro(ß|ss))?$/i], ['Küche', /k(ü|ue|u)che/i],
@@ -385,6 +389,10 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .vac .vl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:12px 0 5px}.vac .vc{display:flex;flex-wrap:wrap;gap:6px}.vac .vc button{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:99px;padding:4px 12px;font-size:12.5px}.vac .vc button.on{border-color:var(--sun);color:var(--sun)}
 .vac .vm{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .vac .vart{display:block;width:100%;max-width:230px;height:auto;margin:6px auto 2px}.vac .vart .rb{transform-origin:112px 78px}.vac .cl .rb{animation:vspin 3s linear infinite}.vac .cl .ld{animation:vspin 1.6s linear infinite;transform-origin:112px 78px}@keyframes vspin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.vac .cl .rb,.vac .cl .ld{animation:none}}
+.pg{display:flex;gap:2px;overflow-x:auto;-webkit-mask-image:linear-gradient(90deg,#000 90%,transparent);mask-image:linear-gradient(90deg,#000 90%,transparent);scrollbar-width:none;border-bottom:1px solid var(--line);padding:0 2px}.pg::-webkit-scrollbar{display:none}
+.pg button{all:unset;cursor:pointer;flex:none;padding:11px 12px;font-size:14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.pg[hidden]{display:none}
+.pg button[aria-selected="true"]{color:var(--sun);border-bottom-color:var(--sun)}.pg button:focus-visible{outline:2px solid var(--sun);outline-offset:-2px;border-radius:8px}
 .bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
@@ -545,6 +553,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
           <div data-k="alarm"></div></div>
       </section>
+      <nav class="pg wide" role="tablist" aria-label="Blätter" data-k="pages">${PAGES.map(([k, n]) => `<button role="tab" data-page="${k}" aria-selected="false">${n}</button>`).join('')}</nav>
 
       <section class="card energy" data-sec="energy">
         <div class="eyebrow"><span>Energie &amp; Wallbox</span><span>● Live</span></div>
@@ -753,6 +762,7 @@ class ZuhauseCard extends HTMLElement {
       if (m && m.dataset.more) this._more(m.dataset.more);
     });
     root.addEventListener('click', e => {
+      const pb = e.target.closest('[data-page]'); if (pb) { this._setPage(pb.dataset.page); return; }
       const b = e.target.closest('[data-vac],[data-vsel],[data-vfan],[data-vbtn]'); if (!b) return;
       const h = this._hass, d = b.dataset;
       if (d.vac) { const [act, id] = d.vac.split('|'); h.callService('vacuum', act, { entity_id: id }); }
@@ -1328,12 +1338,24 @@ class ZuhauseCard extends HTMLElement {
     Object.keys(TILES).forEach(x => { if (!order.includes(x)) order.push(x); });
     return { order, hidden: (t.hidden || []).filter(x => x !== 'home') };
   }
+  _page() {
+    if (this._pageSel) return this._pageSel;
+    let v = null; try { v = localStorage.getItem('zuhause-card-page'); } catch (e) { /* ohne Speicher */ }
+    if (!PAGES.some(x => x[0] === v)) v = window.innerWidth >= 1100 ? 'alles' : 'start';
+    return (this._pageSel = v);
+  }
+  _setPage(k) {
+    this._pageSel = k; try { localStorage.setItem('zuhause-card-page', k); } catch (e) { /* ohne Speicher */ }
+    this._tileSig = null; this._applyTiles();
+  }
   _applyTiles() {
     const arr = !!this._arrange, { order, hidden } = this._tiles();
-    const sig = arr + '|' + order.join() + '|' + hidden.join();
+    const pg = this._page(), pdef = PAGES.find(x => x[0] === pg), inPage = x => arr || !pdef || !pdef[2] || pdef[2].includes(x);
+    const sig = arr + '|' + pg + '|' + order.join() + '|' + hidden.join();
     if (sig === this._tileSig) return;
     this._tileSig = sig;
-    const vis = order.filter(x => arr || !hidden.includes(x));
+    const vis = order.filter(x => inPage(x) && (arr || !hidden.includes(x)));
+    const pb = this._k && this._k.pages; if (pb) { pb.hidden = arr; pb.querySelectorAll('[data-page]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.page === pg))); }
     // Breiten so verteilen, dass keine Lücke bleibt, wenn eine Kachel fehlt
     const pack = (cols, w) => {
       const out = {}; let row = [], sum = 0;
@@ -1346,7 +1368,7 @@ class ZuhauseCard extends HTMLElement {
       const e = this.shadowRoot.querySelector(`section[data-sec="${x}"]`); if (!e) return;
       const hid = hidden.includes(x), b = e.querySelector('.tbar');
       e.style.order = i + 1;
-      e.hidden = hid && !arr;
+      e.hidden = (hid && !arr) || !inPage(x);
       e.classList.toggle('shid', hid && arr);
       if (wide[x]) { e.style.setProperty('--sp', wide[x]); e.style.setProperty('--sp2', mid[x]); }
       b.hidden = !arr;
