@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.29.3';
+const VERSION = '2.30.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -616,12 +616,13 @@ class ZuhauseCard extends HTMLElement {
       }
     });
     root.addEventListener('contextmenu', e => { if (e.target.closest('[data-wbmode]')) e.preventDefault(); });
-    root.addEventListener('focusin', e => { if (e.target.matches('input.rn,select')) this._busy = Date.now() + 120000; });
-    root.addEventListener('focusout', e => { if (e.target.matches('input.rn,select')) this._busy = 0; });
+    root.addEventListener('focusin', e => { if (e.target.matches('input.rn,select,input[data-mottime]')) this._busy = Date.now() + 120000; });
+    root.addEventListener('focusout', e => { if (e.target.matches('input.rn,select,input[data-mottime]')) this._busy = 0; });
     root.addEventListener('input', e => {
       const t = e.target;
       if (t.parentNode && t.parentNode.classList && t.parentNode.classList.contains('bar')) t.parentNode.style.setProperty('--p', t.value + '%');
       if (t.dataset.wbn) { this._busy = Date.now() + 60000; const v = this._k.wbmode.querySelector('[data-k2="wbnv"]'); if (v) v.textContent = t.value + ' %'; }
+      if (t.dataset.motnum) { this._busy = Date.now() + 60000; const sp = t.closest('.row') && t.closest('.row').querySelector('.txt span'); if (sp) sp.textContent = t.value + (t.dataset.unit ? ' ' + t.dataset.unit : ''); }
       if (t.dataset.dim || t.dataset.pos) {
         this._busy = Date.now() + 60000;
         const s = t.closest('.row') && t.closest('.row').querySelector('.txt span');
@@ -631,6 +632,8 @@ class ZuhauseCard extends HTMLElement {
     root.addEventListener('change', e => {
       const t = e.target;
       if (t.dataset.dim) this._dim(t.dataset.dim, +t.value);
+      if (t.dataset.motnum) { this._busy = 0; this._hass.callService('input_number', 'set_value', { entity_id: t.dataset.motnum, value: +t.value }); }
+      if (t.dataset.mottime && t.value) this._hass.callService('input_datetime', 'set_datetime', { entity_id: t.dataset.mottime, time: t.value + ':00' });
       if (t.dataset.wbn) {
         // Netzanteil setzen; > 0 schaltet die eigene Regelung ein, 0 gibt die Wallbox an den Home Manager zurück
         const h = this._hass, n = this._wbN(), v = +t.value;
@@ -1035,6 +1038,28 @@ class ZuhauseCard extends HTMLElement {
     this._hass.callService('climate', 'set_preset_mode', { entity_id: ids, preset_mode: 'none' });
   }
   // ---------- Bewegung schaltet Steckdosen eines Raums ----------
+  // Einstellwerte zur Bewegung eines Raums (Helfer legt der Claude in Home Assistant an: input_*.bewegung_<raum>_...)
+  _motSlug(r) { return String(r.name || r.id).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
+  _motSet(r) {
+    const st = this._hass.states, k = this._motSlug(r), g = (d, n) => st[`${d}.bewegung_${k}_${n}`] || null;
+    const ms = { akt: g('input_boolean', 'aktiv'), nach: g('input_number', 'nachlauf'), dunk: g('input_boolean', 'nur_dunkel'), lux: g('input_number', 'dunkel_lux'), von: g('input_datetime', 'von'), bis: g('input_datetime', 'bis') };
+    return Object.values(ms).some(Boolean) ? ms : null;
+  }
+  _motPanel(ms, sensor) {
+    const num = (s, lbl) => { if (!s) return ''; const a = s.attributes, u = a.unit_of_measurement ? ' ' + a.unit_of_measurement : '', v = +s.state;
+      return `<div class="row"><div class="txt"><b>${lbl}</b><span>${isNaN(v) ? '–' : v + u}</span></div><input type="range" class="dim" min="${a.min}" max="${a.max}" step="${a.step || 1}" value="${isNaN(v) ? a.min : v}" data-motnum="${s.entity_id}" data-unit="${a.unit_of_measurement || ''}" aria-label="${lbl}"></div>`; };
+    const tgl = (s, lbl) => s ? `<div class="row"><div class="txt"><b>${lbl}</b><span>${s.state === 'on' ? 'An' : 'Aus'}</span></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${s.state === 'on'}" data-motbool="${s.entity_id}"></button></div>` : '';
+    const tm = (s, lbl) => s ? `<div class="row"><div class="txt"><b>${lbl}</b></div><input type="time" value="${String(s.state).slice(0, 5)}" data-mottime="${s.entity_id}" aria-label="${lbl}" style="background:var(--line);color:inherit;border:0;border-radius:8px;padding:4px 8px"></div>` : '';
+    // Helligkeit und Batterie des Melders (gleiches Gerät wie der Bewegungssensor)
+    const E = this._hass.entities || {}, dev = E[sensor.entity_id] && E[sensor.entity_id].device_id;
+    const sib = dev ? Object.values(this._hass.states).filter(x => E[x.entity_id] && E[x.entity_id].device_id === dev) : [];
+    const lx = sib.find(x => x.attributes.device_class === 'illuminance'), bt = sib.find(x => x.attributes.device_class === 'battery');
+    const dk = sib.find(x => x.entity_id.startsWith('binary_sensor.') && x.attributes.device_class === 'light');
+    let info = '';
+    if (lx || dk) info += `<div class="row"><div class="txt"><b>Helligkeit jetzt</b><span>${lx && !isNaN(+lx.state) ? Math.round(+lx.state) + ' Lux' : ''}${dk ? (lx ? ' · ' : '') + (dk.state === 'on' ? 'hell' : 'dunkel') : ''}</span></div></div>`;
+    if (bt && !isNaN(+bt.state)) info += `<div class="row"><div class="txt"><b>Batterie des Melders</b><span>${Math.round(+bt.state)} %</span></div></div>`;
+    return tgl(ms.akt, 'Lampe schaltet bei Bewegung') + num(ms.nach, 'Bleibt an nach Bewegung') + tgl(ms.dunk, 'Nur wenn es dunkel ist') + num(ms.lux, 'Dunkel unter') + tm(ms.von, 'Aktiv von') + tm(ms.bis, 'Aktiv bis') + info;
+  }
   _bewSlug(id) { return 'zuhause_bew_' + String(id).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
   _bewAuto(id) { const k = this._bewSlug(id); return Object.values(this._hass.states).find(x => x.entity_id.startsWith('automation.') && x.attributes.id === k) || null; }
   async _bewToggle(r) {
@@ -1426,7 +1451,9 @@ class ZuhauseCard extends HTMLElement {
       && this._areaOf(s.entity_id) === r.id);
     if (mot.length) {
       const on = mot.some(s => s.state === 'on');
-      h += `<div class="row"><div class="ico">${svg('bulb')}</div><div class="txt" data-more="${mot[0].entity_id}"><b>Bewegung ${r.name}</b><span>${on ? 'erkannt' : 'keine'}</span></div></div>`;
+      const ms = this._motSet(r), mo = !!ms && (this._motOpen || (this._motOpen = new Set())).has(r.id);
+      h += `<div class="row"><div class="ico">${svg('bulb')}</div><div class="txt" data-more="${mot[0].entity_id}"><b>Bewegung ${r.name}</b><span>${on ? 'erkannt' : 'keine'}</span></div>${ms ? `<button class="bst" data-motopen="${r.id}" aria-expanded="${mo}">${mo ? 'Zuklappen' : 'Einstellungen'}</button>` : ''}</div>`;
+      if (mo) h += this._motPanel(ms, mot[0]);
     }
     if (r.fn.length) {
       h += '<div class="sect">Funktionen</div>';
@@ -1508,6 +1535,8 @@ class ZuhauseCard extends HTMLElement {
     }
     if (d.vkey) { const [addr, ch] = d.vkey.split('|'); h.callService('homematicip_local', 'set_device_value', { device_address: addr, channel: +ch, parameter: 'PRESS_SHORT', value: 'true', value_type: 'boolean' }); t.textContent = 'Gedrückt'; return true; }
     if (d.hmvar) { this._toggleVar(d.hmvar); return true; }
+    if (d.motopen) { const S = this._motOpen || (this._motOpen = new Set()); S.has(d.motopen) ? S.delete(d.motopen) : S.add(d.motopen); return done(); }
+    if (d.motbool) { h.callService('input_boolean', 'toggle', { entity_id: d.motbool }); return done(); }
     if (d.allroom) {
       const r = room(d.allroom); if (!r) return true;
       const ids = [...r.light.map(x => x.entity_id), ...r.sw.flatMap(x => x._grp || [x.entity_id])];
