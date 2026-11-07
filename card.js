@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.30.0';
+const VERSION = '2.30.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1053,12 +1053,12 @@ class ZuhauseCard extends HTMLElement {
     // Helligkeit und Batterie des Melders (gleiches Gerät wie der Bewegungssensor)
     const E = this._hass.entities || {}, dev = E[sensor.entity_id] && E[sensor.entity_id].device_id;
     const sib = dev ? Object.values(this._hass.states).filter(x => E[x.entity_id] && E[x.entity_id].device_id === dev) : [];
-    const lx = sib.find(x => x.attributes.device_class === 'illuminance'), bt = sib.find(x => x.attributes.device_class === 'battery');
+    const lx = sib.find(x => x.attributes.device_class === 'illuminance') || sib.find(x => x.entity_id.startsWith('sensor.') && /lichtst|helligkeit|illuminance/i.test(x.entity_id)), bt = sib.find(x => x.attributes.device_class === 'battery');
     const dk = sib.find(x => x.entity_id.startsWith('binary_sensor.') && x.attributes.device_class === 'light');
     let info = '';
-    if (lx || dk) info += `<div class="row"><div class="txt"><b>Helligkeit jetzt</b><span>${lx && !isNaN(+lx.state) ? Math.round(+lx.state) + ' Lux' : ''}${dk ? (lx ? ' · ' : '') + (dk.state === 'on' ? 'hell' : 'dunkel') : ''}</span></div></div>`;
+    if (lx || dk) info += `<div class="row"><div class="txt"><b>${lx && lx.attributes.unit_of_measurement ? 'Helligkeit jetzt' : 'Lichtstufe jetzt'}</b><span>${lx && !isNaN(+lx.state) ? (lx.attributes.unit_of_measurement ? Math.round(+lx.state) + ' ' + lx.attributes.unit_of_measurement : Math.round(+lx.state) + ' (0 dunkel, 2 hell)') : ''}${dk ? (lx ? ' · ' : '') + (dk.state === 'on' ? 'hell' : 'dunkel') : ''}</span></div></div>`;
     if (bt && !isNaN(+bt.state)) info += `<div class="row"><div class="txt"><b>Batterie des Melders</b><span>${Math.round(+bt.state)} %</span></div></div>`;
-    return tgl(ms.akt, 'Lampe schaltet bei Bewegung') + num(ms.nach, 'Bleibt an nach Bewegung') + tgl(ms.dunk, 'Nur wenn es dunkel ist') + num(ms.lux, 'Dunkel unter') + tm(ms.von, 'Aktiv von') + tm(ms.bis, 'Aktiv bis') + info;
+    return tgl(ms.akt, 'Lampe schaltet bei Bewegung') + num(ms.nach, 'Bleibt an nach Bewegung') + tgl(ms.dunk, 'Nur wenn es dunkel ist') + num(ms.lux, ms.lux && ms.lux.attributes.unit_of_measurement ? 'Dunkel unter' : 'Dunkel unter Lichtstufe') + tm(ms.von, 'Aktiv von') + tm(ms.bis, 'Aktiv bis') + info;
   }
   _bewSlug(id) { return 'zuhause_bew_' + String(id).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
   _bewAuto(id) { const k = this._bewSlug(id); return Object.values(this._hass.states).find(x => x.entity_id.startsWith('automation.') && x.attributes.id === k) || null; }
