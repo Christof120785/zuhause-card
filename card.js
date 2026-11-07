@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.42.0';
+const VERSION = '2.42.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1915,7 +1915,7 @@ class ZuhauseCard extends HTMLElement {
       actions: send('Haustür', "{% set p = states.person | selectattr('attributes.user_id', 'eq', trigger.to_state.context.user_id) | map(attribute='name') | list %}Haustür über das Dashboard geöffnet{{ ' von ' ~ p[0] if p else '' }}") };
     const txt = { zuhause_alarm_ausgeloest: ['Alarm!', 'Alarm ausgelöst!'], zuhause_haustuer: ['Haustür', 'Haustür auf'], zuhause_carportlicht: ['Carportlicht', 'Carportlicht an'], zuhause_wasser: ['Wasser im Keller', 'Wasser im Keller!'] }[it.id];
     // Carportlicht schaltet per Bewegungsmelder oft: höchstens eine Meldung pro Stunde
-    if (it.id === 'zuhause_carportlicht') return { ...base, mode: 'single', triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true'], not_from: ['unavailable', 'unknown'] }], actions: [...send(...txt), { delay: '01:00:00' }] };
+    if (it.id === 'zuhause_carportlicht') return { ...base, mode: 'single', triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true'], not_from: ['unavailable', 'unknown'] }], actions: [...send(...txt), { delay: '00:15:00' }] };
     return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true', 'ausgelöst'], not_from: ['unavailable', 'unknown'] }], actions: send(...txt) };
   }
   async _notifAction(what) {
@@ -1945,17 +1945,17 @@ class ZuhauseCard extends HTMLElement {
     L.nOff1 = 1; this._save();
     h.callService('automation', 'turn_off', { entity_id: off.map(x => x.entity_id) });
   }
-  // Carportlicht-Meldung einmalig mit Pause von einer Stunde neu anlegen (v2.29.1)
+  // Carportlicht-Meldung einmalig mit Pause von 15 Minuten neu anlegen (v2.29.1 Stunde, v2.42.1 15 Minuten)
   async _notifCarport() {
     const h = this._hass, L = this._lay;
-    if (!L || L.nCarp2 || this._nCarpT || !(h.user && h.user.is_admin)) return;
+    if (!L || L.nCarp3 || this._nCarpT || !(h.user && h.user.is_admin)) return;
     const plan = this._notifPlan(), it = plan.items.find(x => x.id === 'zuhause_carportlicht');
     if (!it || !it.ids.length || !plan.phones.length) return;
     this._nCarpT = true;
     try {
       const had = Object.values(h.states).some(x => x.entity_id.startsWith('automation.') && x.attributes.id === 'zuhause_carportlicht');
       if (had) await h.callApi('POST', 'config/automation/config/zuhause_carportlicht', this._notifCfg(it, plan.phones));
-      L.nCarp2 = 1; this._save();
+      L.nCarp2 = 1; L.nCarp3 = 1; this._save();
     } catch (e) { console.warn('zuhause-card: Carportlicht-Meldung', e); this._nCarpT = false; }
   }
   // Haustür-Meldung hängt seit v2.27.0 am Dashboard-Knopf (input_button) statt am Türöffner-Schalter
