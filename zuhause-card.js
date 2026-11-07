@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.39.0';
+const VERSION = '2.40.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -48,11 +48,12 @@ const PG_ICO = {
   raeume: 'M3 3h8v8H3zm0 10h8v8H3zM13 3h8v8h-8zm0 10h8v8h-8z',
   kameras: 'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z',
   vac: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 6a4 4 0 1 1 0 8 4 4 0 0 1 0-8z',
+  geraete: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 6v12h12V8H6zm6 2.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM8 4.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2z',
   energie: 'M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z',
   alles: 'M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z'
 };
-const PAGES = [['start', 'Start', ['energy', 'wx', 'waste', 'app']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
-  ['vac', 'Saugroboter', ['vac']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
+const PAGES = [['start', 'Start', ['energy', 'wx', 'waste']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
+  ['vac', 'Saugroboter', ['vac']], ['geraete', 'Geräte', ['app']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
 
 // Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
 const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /^wohnzimmer( gro(ß|ss))?$/i], ['Küche', /k(ü|ue|u)che/i],
@@ -561,7 +562,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
           <div data-k="alarm"></div></div>
       </section>
-      <nav class="pg wide" role="tablist" aria-label="Blätter" data-k="pages">${PAGES.map(([k, n]) => `<button role="tab" data-page="${k}" aria-label="${n}" title="${n}" aria-selected="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="${PG_ICO[k]}"/></svg><span>${n}</span></button>`).join('')}</nav>
+      <nav class="pg wide" role="tablist" aria-label="Blätter" data-k="pages">${PAGES.map(([k, n]) => `<button role="tab" data-page="${k}" aria-label="${n}" title="${n}" aria-selected="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="${PG_ICO[k]}"/></svg><span>${n}</span></button>`).join('')}</nav>
 
       <section class="card energy" data-sec="energy">
         <div class="eyebrow"><span>Energie &amp; Wallbox</span><span>● Live</span></div>
