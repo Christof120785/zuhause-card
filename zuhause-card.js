@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.31.0';
+const VERSION = '2.31.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -384,6 +384,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .vac .vb{display:flex;gap:8px;margin:12px 0 4px}.vac .vb button{all:unset;cursor:pointer;flex:1;text-align:center;border:1px solid var(--line);border-radius:12px;padding:10px 0;font-size:13px;font-weight:600}.vac .vb button.go{background:var(--ok,#4caf7d);color:#fff;border-color:transparent}
 .vac .vl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:12px 0 5px}.vac .vc{display:flex;flex-wrap:wrap;gap:6px}.vac .vc button{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:99px;padding:4px 12px;font-size:12.5px}.vac .vc button.on{border-color:var(--sun);color:var(--sun)}
 .vac .vm{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.vac .vart{display:block;width:100%;max-width:230px;height:auto;margin:6px auto 2px}.vac .vart .rb{transform-origin:112px 78px}.vac .cl .rb{animation:vspin 3s linear infinite}.vac .cl .ld{animation:vspin 1.6s linear infinite;transform-origin:112px 78px}@keyframes vspin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.vac .cl .rb,.vac .cl .ld{animation:none}}
 .bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
@@ -1369,14 +1370,19 @@ class ZuhauseCard extends HTMLElement {
       const fanSel = sels.find(x => /l(ü|ue|u)fter|saug|fan|suction/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
       const modeSel = sels.find(x => /reinigungsmethode|wisch|mop|clean.*(method|mode)/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
       const bat = a.battery_level != null ? a.battery_level : (sib.find(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'battery') || {}).state;
-      let html = `<div class="vh"><b>${a.friendly_name || v.entity_id}</b><div class="vst"><b>${bat != null && !isNaN(+bat) ? Math.round(+bat) + ' %' : ''}</b>${TXT[v.state] || v.state}</div></div>`;
+      const art = `<svg class="vart ${v.state === 'cleaning' ? 'cl' : ''}" viewBox="0 0 230 130" aria-hidden="true"><rect x="118" y="14" width="88" height="86" rx="18" fill="#e9edf2"/><rect x="126" y="22" width="72" height="22" rx="10" fill="#fff"/><rect x="128" y="76" width="68" height="24" rx="8" fill="#d5dbe3"/><rect x="150" y="30" width="22" height="3" rx="1.5" fill="#c3cad4"/><ellipse cx="112" cy="116" rx="60" ry="6" fill="rgba(0,0,0,.18)"/><g class="rb"><circle cx="112" cy="78" r="46" fill="#f5f7fa" stroke="#d3d9e1" stroke-width="2"/><rect x="78" y="86" width="26" height="9" rx="4" fill="#cdd3dc"/></g><g class="ld"><circle cx="112" cy="78" r="13" fill="#fff" stroke="#d3d9e1" stroke-width="2"/><circle cx="112" cy="78" r="8" fill="none" stroke="#e8602c" stroke-width="3" stroke-dasharray="26 24"/></g></svg>`;
+      let html = art + `<div class="vh"><b>${a.friendly_name || v.entity_id}</b><div class="vst"><b>${bat != null && !isNaN(+bat) ? Math.round(+bat) + ' %' : ''}</b>${TXT[v.state] || v.state}</div></div>`;
       html += `<div class="vb"><button class="go" data-vac="start|${v.entity_id}">${v.state === 'paused' ? 'Weiter' : 'Start'}</button><button data-vac="pause|${v.entity_id}">Pause</button><button data-vac="return_to_base|${v.entity_id}">Zur Station</button></div>`;
       const row = (lbl, cur, opts, mk) => `<div class="vl">${lbl}</div><div class="vc">${opts.map(o => `<button class="${o === cur ? 'on' : ''}" ${mk(o)}>${o}</button>`).join('')}</div>`;
       if (fanSel) html += row('Saugkraft', fanSel.state, fanSel.attributes.options, o => `data-vsel="${esc(fanSel.entity_id + '|' + o)}"`);
       else if (Array.isArray(a.fan_speed_list) && a.fan_speed_list.length) html += row('Saugkraft', a.fan_speed, a.fan_speed_list, o => `data-vfan="${esc(v.entity_id + '|' + o)}"`);
       if (modeSel) html += row('Reinigung', modeSel.state, modeSel.attributes.options, o => `data-vsel="${esc(modeSel.entity_id + '|' + o)}"`);
+      const dn = ((h.devices && dev && h.devices[dev] && (h.devices[dev].name_by_user || h.devices[dev].name)) || '').trim();
+      const short = x => { const f = (x.attributes.friendly_name || x.entity_id), id = x.entity_id + ' ' + f;
+        if (/staubfilter|filter/i.test(id)) return 'Filter'; if (/hauptb/i.test(id)) return 'Hauptbürste'; if (/seitenb/i.test(id)) return 'Seitenbürste'; if (/sensor/i.test(id)) return 'Sensoren';
+        let t = f; [dn, a.friendly_name, 'Kehrmaschine'].filter(Boolean).forEach(n => { t = t.replace(new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), ''); }); return t.replace(/zur(ü|ue|u)cksetz\w*/ig, '').trim() || f; };
       const mnt = sib.filter(x => /^button\./.test(x.entity_id) && /filter|b(ü|ue|u)rste|sensor/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
-      if (mnt.length) html += `<div class="vl">Wartung nach dem Wechsel</div><div class="vc">${mnt.map(x => `<button data-vbtn="${x.entity_id}">${(x.attributes.friendly_name || x.entity_id).replace(a.friendly_name || '', '').trim()}</button>`).join('')}</div>`;
+      if (mnt.length) html += `<div class="vl">Wartung nach dem Wechsel</div><div class="vc">${mnt.map(x => `<button data-vbtn="${x.entity_id}">${short(x)}</button>`).join('')}</div>`;
       return html;
     }).join('<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">');
     if (k.vac.dataset.v !== out) { k.vac.dataset.v = out; k.vac.innerHTML = out; }
