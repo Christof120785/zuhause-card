@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.30.1';
+const VERSION = '2.31.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -39,7 +39,7 @@ if (!window.__zuhauseUpd) {
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
   energy: ['Energie & Wallbox', 8, 1], cams: ['Kameras', 4, 1], home: ['Räume', 8, 2], waste: ['Müllabfuhr', 4, 1],
-  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1]
+  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1]
 };
 
 // Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
@@ -380,6 +380,10 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .cf button{all:unset;cursor:pointer;border-radius:9px;padding:6px 11px;font-weight:700;background:var(--card)}
 .cf .y{background:#c83a3a;color:#fff}
 /* cameras */
+.vac .vh{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.vac .vh b{font-size:19px}.vac .vst{text-align:right;font-size:12px;color:var(--muted)}.vac .vst b{display:block;font-size:15px;color:var(--ok,#6fcf97)}
+.vac .vb{display:flex;gap:8px;margin:12px 0 4px}.vac .vb button{all:unset;cursor:pointer;flex:1;text-align:center;border:1px solid var(--line);border-radius:12px;padding:10px 0;font-size:13px;font-weight:600}.vac .vb button.go{background:var(--ok,#4caf7d);color:#fff;border-color:transparent}
+.vac .vl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:12px 0 5px}.vac .vc{display:flex;flex-wrap:wrap;gap:6px}.vac .vc button{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:99px;padding:4px 12px;font-size:12.5px}.vac .vc button.on{border-color:var(--sun);color:var(--sun)}
+.vac .vm{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
@@ -603,6 +607,11 @@ class ZuhauseCard extends HTMLElement {
       </section>
 
 
+      <section class="card vac" data-sec="vac">
+        <div class="eyebrow"><span>Saugroboter</span><span>Steuerung</span></div>
+        <div data-k="vac"></div>
+      </section>
+
       <section class="card hist chart" data-sec="hist">
         <div class="eyebrow"><span>Energie</span><span>Bilanz und Prognose</span></div>
         <h2>Erzeugung und Verbrauch</h2>
@@ -741,6 +750,15 @@ class ZuhauseCard extends HTMLElement {
       }
       const m = e.target.closest('[data-more]');
       if (m && m.dataset.more) this._more(m.dataset.more);
+    });
+    root.addEventListener('click', e => {
+      const b = e.target.closest('[data-vac],[data-vsel],[data-vfan],[data-vbtn]'); if (!b) return;
+      const h = this._hass, d = b.dataset;
+      if (d.vac) { const [act, id] = d.vac.split('|'); h.callService('vacuum', act, { entity_id: id }); }
+      if (d.vsel) { const [id, ...o] = d.vsel.split('|'); h.callService('select', 'select_option', { entity_id: id, option: o.join('|') }); }
+      if (d.vbtn) { if (!confirm('Zähler wirklich zurücksetzen? Nur nach dem Wechsel von ' + b.textContent + ' tun.')) return; h.callService('button', 'press', { entity_id: d.vbtn }); }
+      if (d.vfan) { const [id, ...o] = d.vfan.split('|'); h.callService('vacuum', 'set_fan_speed', { entity_id: id, fan_speed: o.join('|') }); }
+      setTimeout(() => this._renderVac(), 600);
     });
     root.addEventListener('keydown', e => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-room]')) { e.preventDefault(); e.target.click(); }
@@ -1334,6 +1352,34 @@ class ZuhauseCard extends HTMLElement {
       b.innerHTML = arr ? `<span>${TILES[x][0]}</span><button data-tmv="${x}|-1" aria-label="${TILES[x][0]} nach oben">↑</button><button data-tmv="${x}|1" aria-label="${TILES[x][0]} nach unten">↓</button>`
         + (x === 'home' ? '' : `<button data-thide="${x}">${svg('eye')} ${hid ? 'Einblenden' : 'Ausblenden'}</button>`) : '';
     });
+  }
+
+  // ---------- Saugroboter: alle vacuum-Entitäten, mit Saugkraft und Reinigungsart des gleichen Geräts ----------
+  _renderVac() {
+    const k = this._k; if (!k.vac) return;
+    const h = this._hass, st = h.states, E = h.entities || {};
+    const vs = Object.values(st).filter(x => x.entity_id.startsWith('vacuum.'));
+    if (!vs.length) { const t = '<p class="sub">Wird angezeigt, sobald ein Saugroboter in Home Assistant ist.</p>'; if (k.vac.dataset.v !== t) { k.vac.dataset.v = t; k.vac.innerHTML = t; } return; }
+    const TXT = { docked: 'Angedockt', cleaning: 'Reinigt', paused: 'Pausiert', returning: 'Fährt zur Station', idle: 'Bereit', error: 'Fehler', unavailable: 'nicht erreichbar', unknown: 'unbekannt' };
+    const esc = t => String(t).replace(/"/g, '&quot;');
+    const out = vs.map(v => {
+      const a = v.attributes, dev = E[v.entity_id] && E[v.entity_id].device_id;
+      const sib = dev ? Object.values(st).filter(x => E[x.entity_id] && E[x.entity_id].device_id === dev && x.entity_id !== v.entity_id) : [];
+      const sels = sib.filter(x => x.entity_id.startsWith('select.') && Array.isArray(x.attributes.options));
+      const fanSel = sels.find(x => /l(ü|ue|u)fter|saug|fan|suction/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
+      const modeSel = sels.find(x => /reinigungsmethode|wisch|mop|clean.*(method|mode)/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
+      const bat = a.battery_level != null ? a.battery_level : (sib.find(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'battery') || {}).state;
+      let html = `<div class="vh"><b>${a.friendly_name || v.entity_id}</b><div class="vst"><b>${bat != null && !isNaN(+bat) ? Math.round(+bat) + ' %' : ''}</b>${TXT[v.state] || v.state}</div></div>`;
+      html += `<div class="vb"><button class="go" data-vac="start|${v.entity_id}">${v.state === 'paused' ? 'Weiter' : 'Start'}</button><button data-vac="pause|${v.entity_id}">Pause</button><button data-vac="return_to_base|${v.entity_id}">Zur Station</button></div>`;
+      const row = (lbl, cur, opts, mk) => `<div class="vl">${lbl}</div><div class="vc">${opts.map(o => `<button class="${o === cur ? 'on' : ''}" ${mk(o)}>${o}</button>`).join('')}</div>`;
+      if (fanSel) html += row('Saugkraft', fanSel.state, fanSel.attributes.options, o => `data-vsel="${esc(fanSel.entity_id + '|' + o)}"`);
+      else if (Array.isArray(a.fan_speed_list) && a.fan_speed_list.length) html += row('Saugkraft', a.fan_speed, a.fan_speed_list, o => `data-vfan="${esc(v.entity_id + '|' + o)}"`);
+      if (modeSel) html += row('Reinigung', modeSel.state, modeSel.attributes.options, o => `data-vsel="${esc(modeSel.entity_id + '|' + o)}"`);
+      const mnt = sib.filter(x => /^button\./.test(x.entity_id) && /filter|b(ü|ue|u)rste|sensor/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
+      if (mnt.length) html += `<div class="vl">Wartung nach dem Wechsel</div><div class="vc">${mnt.map(x => `<button data-vbtn="${x.entity_id}">${(x.attributes.friendly_name || x.entity_id).replace(a.friendly_name || '', '').trim()}</button>`).join('')}</div>`;
+      return html;
+    }).join('<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">');
+    if (k.vac.dataset.v !== out) { k.vac.dataset.v = out; k.vac.innerHTML = out; }
   }
 
   // ---------- Müllabfuhr aus einem Kalender (z. B. Waste Collection Schedule) ----------
@@ -2192,6 +2238,7 @@ class ZuhauseCard extends HTMLElement {
     const h = new Date().getHours();
     this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
     this._renderNotif();
+    this._renderVac();
     // Begrüßung mit dem Namen des angemeldeten Benutzers
     this._set('uname', (this._hass.user && this._hass.user.name) || c.name);
 
