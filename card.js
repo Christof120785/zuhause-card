@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.37.0';
+const VERSION = '2.37.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -387,8 +387,8 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .bins .row{gap:12px;padding:8px 0}.bins svg.bin{width:26px;height:32px;flex:none}
 .camg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 .cam{border-radius:14px;overflow:hidden;background:var(--tile);cursor:pointer}
-.cam .view{aspect-ratio:16/9;max-width:100%;position:relative;display:grid;place-items:center;background:var(--house-soft);color:var(--muted)}
-.cam .view img{width:100%;height:100%;object-fit:cover;display:block}
+.cam .view{aspect-ratio:16/9;max-width:100%;position:relative;overflow:hidden;display:grid;place-items:center;background:var(--house-soft);color:var(--muted)}
+.cam .view img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .cam .view svg{width:28px;height:28px;opacity:.6}
 .cam .live{position:absolute;top:6px;left:6px;background:rgba(200,30,30,.9);color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:5px}
 .cam .meta{padding:6px 9px;display:flex;justify-content:space-between;gap:6px;align-items:center;font-size:12.5px}
