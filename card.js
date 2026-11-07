@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.41.1';
+const VERSION = '2.42.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1089,14 +1089,15 @@ class ZuhauseCard extends HTMLElement {
   _motSlug(r) { return String(r.name || r.id).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
   _motSet(r) {
     const st = this._hass.states, k = this._motSlug(r), g = (d, n) => st[`${d}.bewegung_${k}_${n}`] || null;
-    const ms = { akt: g('input_boolean', 'aktiv'), nach: g('input_number', 'nachlauf'), dunk: g('input_boolean', 'nur_dunkel'), lux: g('input_number', 'dunkel_lux'), von: g('input_datetime', 'von'), bis: g('input_datetime', 'bis') };
+    const ms = { akt: g('input_boolean', 'aktiv'), nach: g('input_number', 'nachlauf'), dunk: g('input_boolean', 'nur_dunkel'), lux: g('input_number', 'dunkel_lux'), hell: g('input_number', 'helligkeit'), von: g('input_datetime', 'von'), bis: g('input_datetime', 'bis') };
     return Object.values(ms).some(Boolean) ? ms : null;
   }
   _motPanel(ms, sensor) {
     const num = (s, lbl) => { if (!s) return ''; const a = s.attributes, u = a.unit_of_measurement ? ' ' + a.unit_of_measurement : '', v = +s.state;
       return `<div class="row mn"><div class="txt"><b>${lbl}</b><span>${isNaN(v) ? '–' : v + u}</span></div><input type="range" class="dim" min="${a.min}" max="${a.max}" step="${a.step || 1}" value="${isNaN(v) ? a.min : v}" data-motnum="${s.entity_id}" data-unit="${a.unit_of_measurement || ''}" aria-label="${lbl}"></div>`; };
     const tgl = (s, lbl) => s ? `<div class="row"><div class="txt"><b>${lbl}</b><span>${s.state === 'on' ? 'An' : 'Aus'}</span></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${s.state === 'on'}" data-motbool="${s.entity_id}"></button></div>` : '';
-    const tm = (s, lbl) => s ? `<div class="row"><div class="txt"><b>${lbl}</b></div><input type="time" value="${String(s.state).slice(0, 5)}" data-mottime="${s.entity_id}" aria-label="${lbl}" style="background:var(--line);color:inherit;border:0;border-radius:8px;padding:4px 8px"></div>` : '';
+    const tm = (s, lbl) => { if (!s) return ''; const t = /^\d{1,2}:\d{2}/.test(String(s.state)) ? String(s.state).slice(0, 5).padStart(5, '0') : '';
+      return `<div class="row"><div class="txt"><b>${lbl}</b><span>${t || 'nicht gesetzt'}</span></div><input type="time" value="${t}" data-mottime="${s.entity_id}" aria-label="${lbl}" style="background:var(--line);color:var(--ink,inherit);color-scheme:light dark;border:0;border-radius:8px;padding:6px 10px;min-width:96px;font:inherit;font-size:14px"></div>`; };
     // Helligkeit und Batterie des Melders (gleiches Gerät wie der Bewegungssensor)
     const E = this._hass.entities || {}, dev = E[sensor.entity_id] && E[sensor.entity_id].device_id;
     const sib = dev ? Object.values(this._hass.states).filter(x => E[x.entity_id] && E[x.entity_id].device_id === dev) : [];
@@ -1105,7 +1106,7 @@ class ZuhauseCard extends HTMLElement {
     let info = '';
     if (lx || dk) info += `<div class="row"><div class="txt"><b>${lx && lx.attributes.unit_of_measurement ? 'Helligkeit jetzt' : 'Lichtstufe jetzt'}</b><span>${lx && !isNaN(+lx.state) ? (lx.attributes.unit_of_measurement ? Math.round(+lx.state) + ' ' + lx.attributes.unit_of_measurement : Math.round(+lx.state) + ' (0 dunkel, 2 hell)') : ''}${dk ? (lx ? ' · ' : '') + (dk.state === 'on' ? 'hell' : 'dunkel') : ''}</span></div></div>`;
     if (bt && !isNaN(+bt.state)) info += `<div class="row"><div class="txt"><b>Batterie des Melders</b><span>${Math.round(+bt.state)} %</span></div></div>`;
-    return tgl(ms.akt, 'Lampe schaltet bei Bewegung') + num(ms.nach, 'Bleibt an nach Bewegung') + tgl(ms.dunk, 'Nur wenn es dunkel ist') + num(ms.lux, ms.lux && ms.lux.attributes.unit_of_measurement ? 'Dunkel unter' : 'Dunkel unter Lichtstufe') + tm(ms.von, 'Aktiv von') + tm(ms.bis, 'Aktiv bis') + info;
+    return tgl(ms.akt, 'Lampe schaltet bei Bewegung') + num(ms.hell, 'Helligkeit beim Einschalten') + num(ms.nach, 'Bleibt an nach Bewegung') + tgl(ms.dunk, 'Nur wenn es dunkel ist') + num(ms.lux, ms.lux && ms.lux.attributes.unit_of_measurement ? 'Dunkel unter' : 'Dunkel unter Lichtstufe (0, 1, 2)') + tm(ms.von, 'Aktiv von') + tm(ms.bis, 'Aktiv bis') + info;
   }
   _bewSlug(id) { return 'zuhause_bew_' + String(id).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
   _bewAuto(id) { const k = this._bewSlug(id); return Object.values(this._hass.states).find(x => x.entity_id.startsWith('automation.') && x.attributes.id === k) || null; }
