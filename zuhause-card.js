@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.41.0';
+const VERSION = '2.41.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -303,6 +303,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .stats span{font-size:11px;color:var(--muted)}
 .row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
 .row:first-of-type{border-top:0}
+.row.mn{flex-wrap:wrap;gap:2px 10px}.row.mn .txt{flex:1 1 100%}.row.mn .dim{flex:1 1 100%;margin:2px 0 4px}
 .row .txt{flex:1;min-width:0}
 .row .txt b{font-weight:600;display:block}
 .row .txt span{font-size:11.5px;color:var(--muted)}
@@ -1110,7 +1111,7 @@ class ZuhauseCard extends HTMLElement {
   }
   _motPanel(ms, sensor) {
     const num = (s, lbl) => { if (!s) return ''; const a = s.attributes, u = a.unit_of_measurement ? ' ' + a.unit_of_measurement : '', v = +s.state;
-      return `<div class="row"><div class="txt"><b>${lbl}</b><span>${isNaN(v) ? '–' : v + u}</span></div><input type="range" class="dim" min="${a.min}" max="${a.max}" step="${a.step || 1}" value="${isNaN(v) ? a.min : v}" data-motnum="${s.entity_id}" data-unit="${a.unit_of_measurement || ''}" aria-label="${lbl}"></div>`; };
+      return `<div class="row mn"><div class="txt"><b>${lbl}</b><span>${isNaN(v) ? '–' : v + u}</span></div><input type="range" class="dim" min="${a.min}" max="${a.max}" step="${a.step || 1}" value="${isNaN(v) ? a.min : v}" data-motnum="${s.entity_id}" data-unit="${a.unit_of_measurement || ''}" aria-label="${lbl}"></div>`; };
     const tgl = (s, lbl) => s ? `<div class="row"><div class="txt"><b>${lbl}</b><span>${s.state === 'on' ? 'An' : 'Aus'}</span></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${s.state === 'on'}" data-motbool="${s.entity_id}"></button></div>` : '';
     const tm = (s, lbl) => s ? `<div class="row"><div class="txt"><b>${lbl}</b></div><input type="time" value="${String(s.state).slice(0, 5)}" data-mottime="${s.entity_id}" aria-label="${lbl}" style="background:var(--line);color:inherit;border:0;border-radius:8px;padding:4px 8px"></div>` : '';
     // Helligkeit und Batterie des Melders (gleiches Gerät wie der Bewegungssensor)
