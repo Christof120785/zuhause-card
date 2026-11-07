@@ -12,6 +12,15 @@ Regeln für alle Aufträge:
 
 ---
 
+## A9 · 2026-11-07 · Flurlicht geht nach dem Ausschalten nicht sofort wieder an · Status: offen
+
+Wenn Christof im Flur unten hoch und runter läuft und das Licht gerade aus ist, geht es bei der nächsten Bewegung nicht sofort wieder an. Er will wissen, wie viel Zeit zwischen Ausschalten und dem nächsten Einschalten vergeht, und sie möglichst klein haben (am liebsten sofort).
+1. Finde die Ursache(n) und sage mir pro Ursache, wie viele Sekunden sie kostet:
+   - Der Shelly BLU Motion meldet nach einer Bewegung eine gewisse Zeit keine neue (Ruhezeit oder „Blind time“ des Melders). Sieh nach, was an dem Gerät eingestellt ist und ob sich das von Home Assistant aus oder nur in der Shelly-App ändern lässt. Falls nur in der App, sage mir genau, wo ich es einstelle.
+   - Die Automation: Modus (`single`, `restart`, …), eine Wartezeit am Ende (zum Beispiel der Nachlauf, der noch läuft, während das Licht schon aus ist), und ob sie auf den Wechsel „aus → an“ des Melders wartet, den es erst nach der Ruhezeit wieder gibt.
+2. Behebe, was du von Home Assistant aus beheben kannst. Zum Beispiel: Modus `restart`, damit eine neue Bewegung den Nachlauf neu startet und das Licht sofort wieder an ist.
+3. Teste und nenne mir die Zeit, die es jetzt zwischen Aus und erneutem Einschalten dauert.
+
 ## A8 · 2026-11-07 · WiZ-Lampen Flur unten: Helligkeit beim Einschalten · Status: offen
 
 Die beiden WiZ-Lampen im Flur unten merken sich die Helligkeit aus der WiZ-App nicht, wenn Home Assistant sie schaltet (sie gehen mit der letzten oder voller Helligkeit an). Gewünscht sind 35 % als Standard.
