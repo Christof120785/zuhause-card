@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.29.2';
+const VERSION = '2.29.3';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1443,12 +1443,7 @@ class ZuhauseCard extends HTMLElement {
       && this._areaOf(s.entity_id) === r.id);
     if (mot.length) {
       const on = mot.some(s => s.state === 'on');
-      h += `<div class="row"><div class="ico">${svg('bulb')}</div><div class="txt" data-more="${mot[0].entity_id}"><b>Bewegung</b><span>${on ? 'erkannt' : 'keine'}</span></div></div>`;
-      // Steckdosen des Raums bei Bewegung einschalten (Automation wird in Home Assistant angelegt, 3 Minuten Nachlauf)
-      if (r.sw.length && this._hass.user && this._hass.user.is_admin) {
-        const au = this._bewAuto(r.id);
-        h += `<div class="row"><div class="ico">${svg('plug')}</div><div class="txt"><b>Bei Bewegung einschalten</b><span>${au ? (au.state === 'on' ? 'An · Steckdose geht 3 Min. nach der letzten Bewegung aus' : 'Aus') : 'Noch nicht eingerichtet'}</span></div><button class="tg" role="switch" aria-label="Bei Bewegung einschalten ${r.name}" aria-checked="${!!au && au.state === 'on'}" data-bew="${r.id}"></button></div>`;
-      }
+      h += `<div class="row"><div class="ico">${svg('bulb')}</div><div class="txt" data-more="${mot[0].entity_id}"><b>Bewegung ${r.name}</b><span>${on ? 'erkannt' : 'keine'}</span></div></div>`;
     }
     if (r.fn.length) {
       h += '<div class="sect">Funktionen</div>';
