@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.33.0';
+const VERSION = '2.35.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -22,11 +22,11 @@ if (!window.__zuhauseUpd) {
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
   energy: ['Energie & Wallbox', 8, 1], cams: ['Kameras', 4, 1], home: ['Räume', 8, 2], waste: ['Müllabfuhr', 4, 1],
-  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1]
+  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1], app: ['Haushaltsgeräte', 4, 1]
 };
 
 // Blätter (Tabs) unter der Begrüßung: Schlüssel, Name, enthaltene Kacheln (null = alle)
-const PAGES = [['start', 'Start', ['energy', 'wx', 'waste']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
+const PAGES = [['start', 'Start', ['energy', 'wx', 'waste', 'app']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
   ['vac', 'Saugroboter', ['vac']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
 
 // Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
@@ -261,7 +261,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .seg{all:unset;cursor:pointer;flex:1;text-align:center;padding:10px 8px;border-radius:12px;background:var(--tile);font-size:13.5px;font-weight:600;color:var(--fg)}
 .seg.on{background:var(--sun);color:#fff}
 .seg[disabled]{opacity:.45;cursor:default}
-.segs-s{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
+.wbprio{margin-top:12px}.wbprio-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:13px}.wbprio-h span{color:var(--muted);font-size:12px;text-align:right}.segs-s{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
 .wbn{margin-top:10px;padding:12px;border-radius:14px;background:var(--tile)}
 .wbn-h{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px}.wbn-h span{font-weight:700;font-size:18px;color:var(--grid)}
 .wbn input{width:100%;margin:10px 0 2px;accent-color:var(--grid)}
@@ -605,6 +605,11 @@ class ZuhauseCard extends HTMLElement {
         <div data-k="vac"></div>
       </section>
 
+      <section class="card app" data-sec="app">
+        <div class="eyebrow"><span>Haushaltsgeräte</span><span>Status</span></div>
+        <div data-k="app"></div>
+      </section>
+
       <section class="card hist chart" data-sec="hist">
         <div class="eyebrow"><span>Energie</span><span>Bilanz und Prognose</span></div>
         <h2>Erzeugung und Verbrauch</h2>
@@ -699,6 +704,8 @@ class ZuhauseCard extends HTMLElement {
       const sf = e.target.closest('[data-sysfix]');
       if (sf) { this._sysFix(...sf.dataset.sysfix.split('|')); return; }
       if (e.target.closest('[data-syshide]')) { this._sysHide = [...this._sys.bad, ...this._sys.hint].join('|'); this._renderSys(); return; }
+      const wp = e.target.closest('[data-wbprio]');
+      if (wp) { this._hass.callService('input_boolean', wp.dataset.wbprio === 'auto' ? 'turn_on' : 'turn_off', { entity_id: 'input_boolean.zuhause_solar_prioritaet_auto' }); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
@@ -1361,6 +1368,28 @@ class ZuhauseCard extends HTMLElement {
   }
 
   // ---------- Saugroboter: alle vacuum-Entitäten, mit Saugkraft und Reinigungsart des gleichen Geräts ----------
+  // Haushaltsgeräte (Waschmaschine, Trockner): findet die Einträge am Namen; ohne Treffer ein Platzhalter
+  _renderApp() {
+    const k = this._k; if (!k.app) return;
+    const st = this._hass.states, all = Object.values(st);
+    const DEV = [['Waschmaschine', /waschmaschine|washer|waschen/i, '🧺', 'Wird nächste Woche verbunden'], ['Trockner', /trockner|dryer/i, '♨', 'Noch nicht verbunden']];
+    const nm = x => (x.attributes.friendly_name || '') + ' ' + x.entity_id;
+    const row = ([label, re, ic, ph]) => {
+      const es = all.filter(x => re.test(nm(x)) && !/^(update|button|number|select|switch|automation|script)\./.test(x.entity_id));
+      if (!es.length) return `<div class="row"><div class="txt"><b>${ic} ${label}</b><div class="s" style="color:var(--muted);font-size:12px">${ph}</div></div><span class="sub">–</span></div>`;
+      const ok = x => x && !['unknown', 'unavailable', ''].includes(x.state);
+      const pick = r => es.find(x => x.entity_id.startsWith('sensor.') && r.test(nm(x)) && ok(x));
+      const stat = pick(/status|zustand|state|phase|betrieb/i) || es.find(x => ok(x) && /^(sensor|binary_sensor)\./.test(x.entity_id));
+      const rem = pick(/restzeit|remaining|verbleib/i), prg = pick(/programm|program/i);
+      const unit = x => x.attributes.unit_of_measurement ? ' ' + x.attributes.unit_of_measurement : '';
+      const fmt = x => /^\d+(\.\d+)?$/.test(x.state) ? x.state + (unit(x) || ' min') : x.state;
+      const a = stat ? stat.state : 'nicht erreichbar';
+      const sub = [prg && fmt(prg), rem && 'noch ' + fmt(rem)].filter(Boolean).join(' · ');
+      return `<div class="row"><div class="txt"><b>${ic} ${label}</b>${sub ? `<div class="s" style="color:var(--muted);font-size:12px">${sub}</div>` : ''}</div><span class="sub" style="text-align:right">${a}</span></div>`;
+    };
+    const out = DEV.map(row).join('');
+    if (k.app.dataset.v !== out) { k.app.dataset.v = out; k.app.innerHTML = out; }
+  }
   _renderVac() {
     const k = this._k; if (!k.vac) return;
     const h = this._hass, st = h.states, E = h.entities || {};
@@ -2082,6 +2111,20 @@ class ZuhauseCard extends HTMLElement {
     } catch (e) { console.warn('zuhause-card: Netzanteil einrichten', e); }
   }
 
+  // Vorrang der Sonne: Batterie oder Auto (Schalter an = Auto zuerst); ohne angestecktes Auto lädt immer die Batterie
+  _wbPrio() {
+    const h = this._hass, bool = h.states['input_boolean.zuhause_solar_prioritaet_auto'];
+    const st = this._wbEnt(['sensor'], /status ladevorgang|charging session status/i);
+    const s = st ? String(st.state).toLowerCase() : '';
+    const connected = !st ? null : !(['unknown', 'unavailable', ''].includes(s) || (s.includes('nicht') && s.includes('verbunden')) || s.includes('not connected') || s.includes('getrennt'));
+    const auto = !!bool && bool.state === 'on';
+    const note = !bool ? 'wird eingerichtet' : connected === false ? 'kein Auto: Batterie lädt' : auto ? 'Auto zuerst, Rest in die Batterie' : 'Batterie zuerst, Rest ins Auto';
+    if (!bool && !this._wbPrioT && h.user && h.user.is_admin) {
+      this._wbPrioT = true;
+      h.callWS({ type: 'input_boolean/create', name: 'Zuhause Solar Prioritaet Auto', icon: 'mdi:car-electric' }).catch(e => console.warn('zuhause-card: Solar-Prioritaet', e));
+    }
+    return { bool, auto, connected, note };
+  }
   _renderWbMode() {
     const k = this._k.wbmode; if (!k) return;
     this._wbSess();
@@ -2099,7 +2142,9 @@ class ZuhauseCard extends HTMLElement {
     const isOn = o => o === pv ? cur === pv || reg : cur === o && !reg;
     const btn = (o, label) => o ? `<button class="seg${isOn(o) ? ' on' : ''}" data-wbmode="${sel.entity_id}|${o}" ${locked ? 'disabled' : ''}>${label}</button>` : '';
     const pvl = n.num ? `☀ PV-Laden<small class="segs-s">${n.share > 0 ? `+ ${n.share} % Netz` : 'nur Sonne'}</small>` : '☀ PV-Laden';
-    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>`
+    const pr = this._wbPrio();
+    const prHtml = `<div class="wbprio"><div class="wbprio-h"><b>Solar zuerst für</b><span>${pr.note}</span></div><div class="segs" style="margin-top:6px"><button class="seg${pr.auto ? '' : ' on'}" data-wbprio="bat" ${pr.bool ? '' : 'disabled'}>🔋 Batterie</button><button class="seg${pr.auto ? ' on' : ''}" data-wbprio="auto" ${pr.bool ? '' : 'disabled'}>🚗 Auto</button></div></div>`;
+    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>` + prHtml
       + (this._wbNOpen && n.num ? `<div class="wbn"><div class="wbn-h"><b>Netzanteil beim PV-Laden</b><span data-k2="wbnv">${n.share} %</span></div>
         <input type="range" min="0" max="100" step="10" value="${n.share}" data-wbn="${n.num.entity_id}" aria-label="Netzanteil">
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
@@ -2250,6 +2295,7 @@ class ZuhauseCard extends HTMLElement {
     this._set('greet', h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend');
     this._renderNotif();
     this._renderVac();
+    this._renderApp();
     // Begrüßung mit dem Namen des angemeldeten Benutzers
     this._set('uname', (this._hass.user && this._hass.user.name) || c.name);
 
