@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.42.1';
+const VERSION = '2.43.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -22,7 +22,7 @@ if (!window.__zuhauseUpd) {
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
   energy: ['Energie & Wallbox', 8, 1], cams: ['Kameras', 4, 1], home: ['Räume', 8, 2], waste: ['Müllabfuhr', 4, 1],
-  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1], app: ['Haushaltsgeräte', 4, 1]
+  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1], app: ['Haushaltsgeräte', 4, 1], prn: ['3D-Drucker', 4, 1]
 };
 
 // Blätter (Tabs) unter der Begrüßung: Schlüssel, Name, enthaltene Kacheln (null = alle)
@@ -35,7 +35,7 @@ const PG_ICO = {
   alles: 'M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z'
 };
 const PAGES = [['start', 'Start', ['energy', 'wx', 'waste']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
-  ['geraete', 'Haushalt', ['app', 'vac']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
+  ['geraete', 'Haushalt', ['app', 'vac', 'prn']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
 
 // Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
 const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /^wohnzimmer( gro(ß|ss))?$/i], ['Küche', /k(ü|ue|u)che/i],
@@ -617,6 +617,11 @@ class ZuhauseCard extends HTMLElement {
       <section class="card app" data-sec="app">
         <div class="eyebrow"><span>Haushaltsgeräte</span><span>Status</span></div>
         <div data-k="app"></div>
+      </section>
+
+      <section class="card prn" data-sec="prn">
+        <div class="eyebrow"><span>3D-Drucker</span><span>Verbrauch</span></div>
+        <div data-k="prn"></div>
       </section>
 
       <section class="card hist chart" data-sec="hist">
@@ -1410,6 +1415,26 @@ class ZuhauseCard extends HTMLElement {
     };
     const out = DEV.map(row).join('');
     if (k.app.dataset.v !== out) { k.app.dataset.v = out; k.app.innerHTML = out; }
+  }
+  // 3D-Drucker: Verbrauch aus der Messsteckdose (Leistung, kWh heute und im Monat); Einträge werden am Namen gefunden
+  _renderPrn() {
+    const k = this._k; if (!k.prn) return;
+    const all = Object.values(this._hass.states).filter(x => x.entity_id.startsWith('sensor.') && /drucker|printer/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
+    const ok = x => x && !['unknown', 'unavailable', ''].includes(x.state) && !isNaN(+x.state);
+    const nm = x => x.entity_id + ' ' + (x.attributes.friendly_name || '');
+    const pw = all.find(x => /^(W|kW)$/.test(x.attributes.unit_of_measurement || '') && ok(x));
+    const en = all.filter(x => /^(kWh|Wh)$/.test(x.attributes.unit_of_measurement || '') && ok(x));
+    const kwh = x => { const v = +x.state; return x.attributes.unit_of_measurement === 'Wh' ? v / 1000 : v; };
+    const day = en.find(x => /heute|today|tag|daily/i.test(nm(x))), mon = en.find(x => /monat|month/i.test(nm(x)));
+    let out;
+    if (!pw && !en.length) out = '<p class="sub">Wird angezeigt, sobald die Messsteckdose am Drucker in Home Assistant ist.</p>';
+    else {
+      const w = pw ? (pw.attributes.unit_of_measurement === 'kW' ? Math.round(+pw.state * 1000) : Math.round(+pw.state)) : null;
+      const f = x => x ? kwh(x).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kWh' : '–';
+      out = `<div class="row"><div class="txt"><b style="font-size:26px;font-variant-numeric:tabular-nums">${w == null ? '–' : w.toLocaleString('de-DE') + ' W'}</b><span>${w == null ? '' : w > 20 ? 'Der Drucker druckt oder heizt' : 'Bereit oder aus'}</span></div></div>`
+        + `<div class="row"><div class="txt"><b>Heute</b></div><span class="sub">${f(day)}</span></div><div class="row"><div class="txt"><b>Dieser Monat</b></div><span class="sub">${f(mon)}</span></div>`;
+    }
+    if (k.prn.dataset.v !== out) { k.prn.dataset.v = out; k.prn.innerHTML = out; }
   }
   _renderVac() {
     const k = this._k; if (!k.vac) return;
@@ -2323,6 +2348,7 @@ class ZuhauseCard extends HTMLElement {
     this._renderNotif();
     this._renderVac();
     this._renderApp();
+    this._renderPrn();
     // Begrüßung mit dem Namen des angemeldeten Benutzers
     this._set('uname', (this._hass.user && this._hass.user.name) || c.name);
 
