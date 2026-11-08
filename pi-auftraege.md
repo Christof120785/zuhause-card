@@ -12,15 +12,6 @@ Regeln für alle Aufträge:
 
 ---
 
-## A10 · 2026-11-08 · Zweite Shelly-Steckdose am 3D-Drucker, nur zur Energiemessung · Status: offen
-
-Christof hat eine zweite Shelly Plug M Gen3 (gleiches Modell wie die im Flur unten). Sie soll am 3D-Drucker nur messen, nie schalten. Sie ist schon in Home Assistant, heißt dort aber noch „LED Stripe Wand Flur“ (Bereich „Flur unten“, Hardware-Adresse endet auf `BE:80`, Schalter „LED Stripe Wand Flur (Versteckt)“).
-1. Benenne Gerät und Einträge um. Gerätename: „Strommessung 3D Drucker“. Die Einträge sollen so heißen, dass „3D Drucker“ beziehungsweise „Drucker“ im Namen steht (zum Beispiel `sensor.strommessung_3d_drucker_leistung` in W und `sensor.strommessung_3d_drucker_energie` in kWh gesamt, Schalter `switch.strommessung_3d_drucker`). Passe Entitäts-IDs mit an, wenn sie noch „led_stripe_wand_flur“ enthalten. Verschiebe das Gerät aus „Flur unten“ in den Bereich, in dem der Drucker steht (frage Christof, falls unklar). Prüfe danach, ob die alte Bezeichnung irgendwo noch vorkommt (Automationen, Szenen, Dashboards, Energie-Einstellungen), und sage mir, wo.
-2. Der Drucker darf nie versehentlich ausgehen: Die Steckdose soll nach einem Stromausfall wieder an sein („Zustand nach Stromausfall: an“), und das Relais darf nicht in Automationen, Szenen oder Bewegungsregeln vorkommen. Prüfe, dass keine Shelly-Regel oder Szene (Cloud oder lokal) das Relais schaltet (früher gab es dort eine Bewegungsregel), und schalte eine vorhandene ab. Falls sich der Zustand nach Stromausfall nur in der Shelly-App einstellen lässt, sage mir genau wo. Blende den Schalter im Dashboard-Bereich aus oder schütze ihn mit Bestätigung, soweit das ohne Änderung an der Karte geht.
-3. Lege zwei Verbrauchszähler (Helfer „Verbrauchszähler“ / utility_meter) auf die Energie-Entität an: täglich mit dem Namen „Drucker Energie heute“ und monatlich mit dem Namen „Drucker Energie Monat“. Die Namen müssen „Drucker“ und „heute“ beziehungsweise „Monat“ enthalten, die Dashboard-Karte findet sie darüber.
-4. Trage die Energie-Entität in den Energie-Einstellungen von Home Assistant als Einzelgerät ein (Anzeigename „3D-Drucker“).
-Die Dashboard-Kachel „3D-Drucker“ (Leistung, heute, Monat) baut der Claude im Haupt-Thread, sie wartet nur auf die Einträge aus Punkt 1 und 3. Ändere nichts an der Dashboard-Karte.
-
 ## A9 · 2026-11-07 · Flurlicht geht nach dem Ausschalten nicht sofort wieder an · Status: offen
 
 Wenn Christof im Flur unten hoch und runter läuft und das Licht gerade aus ist, geht es bei der nächsten Bewegung nicht sofort wieder an. Er will wissen, wie viel Zeit zwischen Ausschalten und dem nächsten Einschalten vergeht, und sie möglichst klein haben (am liebsten sofort).
@@ -80,6 +71,10 @@ Der Schalter `input_boolean.zuhause_anker_entladen_sperren` existiert, tut aber 
 ## A2 · 2026-11-07 · Waschmaschine über Home Connect · Status: wartet
 
 Wartet, bis die Siemens-Waschmaschine da und in der Home-Connect-App angemeldet ist (nächste Woche). Dann: Binde sie über die eingebaute Home-Connect-Integration ein und schreibe mir eine Liste aller Einträge mit Name und aktuellem Wert. Das Home-Connect-Konto hat Christof schon.
+
+## A10 · 2026-11-08 · Zweite Shelly-Steckdose am 3D-Drucker, nur zur Energiemessung · Status: erledigt
+
+Umbenannt in „Strommessung 3D Drucker“, Bereich Büro. Einträge: `sensor.strommessung_3d_drucker_leistung`, `sensor.strommessung_3d_drucker_energie`, `sensor.drucker_energie_heute`, `sensor.drucker_energie_monat`, Schalter `switch.strommessung_3d_drucker` (ausgeblendet, nur messen).
 
 ## A1 · 2026-11-07 · Trockner über ConnectLife · Status: erledigt
 
