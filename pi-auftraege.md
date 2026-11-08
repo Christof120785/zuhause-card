@@ -12,6 +12,16 @@ Regeln für alle Aufträge:
 
 ---
 
+## A10 · 2026-11-08 · Zweite Shelly-Steckdose am 3D-Drucker, nur zur Energiemessung · Status: offen
+
+Christof hat eine zweite Shelly Plug M Gen3 (gleiches Modell wie die im Flur unten). Sie soll am 3D-Drucker nur messen, nie schalten.
+1. Ist die Steckdose noch nicht in Home Assistant, sage Christof, was er tun muss (in die Steckdose am Drucker stecken, in der Shelly-App ins WLAN bringen). Warte darauf, dann binde sie über die vorhandene Shelly-Integration ein.
+2. Nenne das Gerät „Drucker“ (Gerät und Bereich zum Beispiel „Büro“ oder „Hobby“, frage Christof, falls unklar). Die Einträge sollen so heißen, dass der Name „Drucker“ enthalten ist: `sensor.drucker_leistung` (W) und `sensor.drucker_energie` (kWh gesamt).
+3. Der Drucker darf nie versehentlich ausgehen: Die Steckdose soll nach einem Stromausfall wieder an sein („Zustand nach Stromausfall: an“), und das Relais darf nicht in Automationen, Szenen oder Bewegungsregeln vorkommen. Prüfe, dass keine Shelly-Regel oder Szene (Cloud oder lokal) das Relais schaltet, und schalte eine vorhandene ab. Falls sich der Zustand nach Stromausfall nur in der Shelly-App einstellen lässt, sage mir genau wo. Blende den Schalter (`switch.drucker...`) im Dashboard-Bereich aus oder schütze ihn mit Bestätigung, soweit das ohne Änderung an der Karte geht.
+4. Lege zwei Verbrauchszähler (Helfer „Verbrauchszähler“ / utility_meter) auf `sensor.drucker_energie` an: täglich mit dem Namen „Drucker Energie heute“ und monatlich mit dem Namen „Drucker Energie Monat“. Die Namen müssen „Drucker“ und „heute“ beziehungsweise „Monat“ enthalten, die Dashboard-Karte findet sie darüber.
+5. Trage `sensor.drucker_energie` in den Energie-Einstellungen von Home Assistant als Einzelgerät ein (Anzeigename „3D-Drucker“).
+Die Dashboard-Kachel „3D-Drucker“ (Leistung, heute, Monat) baut der Claude im Haupt-Thread, sie wartet nur auf die Einträge aus Punkt 2 und 4. Ändere nichts an der Dashboard-Karte.
+
 ## A9 · 2026-11-07 · Flurlicht geht nach dem Ausschalten nicht sofort wieder an · Status: offen
 
 Wenn Christof im Flur unten hoch und runter läuft und das Licht gerade aus ist, geht es bei der nächsten Bewegung nicht sofort wieder an. Er will wissen, wie viel Zeit zwischen Ausschalten und dem nächsten Einschalten vergeht, und sie möglichst klein haben (am liebsten sofort).
