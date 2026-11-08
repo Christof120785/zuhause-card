@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.43.0';
+const VERSION = '2.43.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1960,6 +1960,16 @@ class ZuhauseCard extends HTMLElement {
     if (it.id === 'zuhause_carportlicht') return { ...base, mode: 'single', triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true'], not_from: ['unavailable', 'unknown'] }], actions: [...send(...txt), { delay: '00:15:00' }] };
     return { ...base, triggers: [{ trigger: 'state', entity_id: it.ids, to: ['on', 'true', 'ausgelöst'], not_from: ['unavailable', 'unknown'] }], actions: send(...txt) };
   }
+  // Empfänger einer vorhandenen Meldung beibehalten (zum Beispiel wenn ein Handy dort bewusst entfernt wurde); ohne vorhandene Regel gehen alle Handys
+  async _notifRecv(id, phones) {
+    try {
+      const c = await this._hass.callApi('GET', 'config/automation/config/' + id), found = new Set();
+      const walk = o => { if (!o || typeof o !== 'object') return; if (typeof o.action === 'string' && /^notify\.mobile_app_/.test(o.action)) found.add(o.action.slice(7)); Object.values(o).forEach(walk); };
+      walk(c && (c.actions || c.action || c));
+      const r = [...found].filter(p => phones.includes(p));
+      return r.length ? r : phones;
+    } catch (e) { return phones; }
+  }
   async _notifAction(what) {
     const h = this._hass, plan = this._notifPlan();
     if (!plan.phones.length) { this._notifMsg = 'Kein Handy mit der Home-Assistant-App gefunden.'; this._notifSig = null; this._renderNotif(); return; }
@@ -1971,7 +1981,7 @@ class ZuhauseCard extends HTMLElement {
       let ok = 0, fail = 0;
       for (const it of plan.items) {
         if (!it.ids.length) continue;
-        try { await h.callApi('POST', 'config/automation/config/' + it.id, this._notifCfg(it, plan.phones)); ok++; } catch (e) { fail++; }
+        try { await h.callApi('POST', 'config/automation/config/' + it.id, this._notifCfg(it, await this._notifRecv(it.id, plan.phones))); ok++; } catch (e) { fail++; }
       }
       this._notifMsg = fail ? `${ok} eingerichtet, ${fail} fehlgeschlagen.` : `✓ ${ok} Meldungen eingerichtet.`;
     }
@@ -1996,7 +2006,7 @@ class ZuhauseCard extends HTMLElement {
     this._nCarpT = true;
     try {
       const had = Object.values(h.states).some(x => x.entity_id.startsWith('automation.') && x.attributes.id === 'zuhause_carportlicht');
-      if (had) await h.callApi('POST', 'config/automation/config/zuhause_carportlicht', this._notifCfg(it, plan.phones));
+      if (had) await h.callApi('POST', 'config/automation/config/zuhause_carportlicht', this._notifCfg(it, await this._notifRecv('zuhause_carportlicht', plan.phones)));
       L.nCarp2 = 1; L.nCarp3 = 1; this._save();
     } catch (e) { console.warn('zuhause-card: Carportlicht-Meldung', e); this._nCarpT = false; }
   }
@@ -2010,7 +2020,7 @@ class ZuhauseCard extends HTMLElement {
     try {
       if (!h.states['input_button.zuhause_haustuer_knopf']) await h.callWS({ type: 'input_button/create', name: 'Zuhause Haustuer Knopf', icon: 'mdi:door-open' });
       const had = Object.values(h.states).some(x => x.entity_id.startsWith('automation.') && x.attributes.id === 'zuhause_haustuer');
-      if (had) await h.callApi('POST', 'config/automation/config/zuhause_haustuer', this._notifCfg(it, plan.phones));
+      if (had) await h.callApi('POST', 'config/automation/config/zuhause_haustuer', this._notifCfg(it, await this._notifRecv('zuhause_haustuer', plan.phones)));
       L.nDoor2 = 1; this._save();
     } catch (e) { console.warn('zuhause-card: Haustür-Meldung', e); this._nDoorT = false; }
   }
