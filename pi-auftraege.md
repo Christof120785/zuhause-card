@@ -12,7 +12,7 @@ Regeln für alle Aufträge:
 
 ---
 
-## A12 · 2026-11-09 · Wandtaster Wohnzimmer: Umschalten statt nur Einschalten · Status: offen
+## A12 · 2026-11-09 · Wandtaster Wohnzimmer: Umschalten statt nur Einschalten · Status: erledigt
 
 Die Automationen `wandtaster_wohnzimmer_klein` und `wandtaster_wohnzimmer_gross` (aus A11) schalten das Licht nur ein. Christof will es aus- und einschalten können.
 1. Ändere beide Automationen so, dass ein kurzer Tastendruck das Licht umschaltet (`light.toggle` statt `light.turn_on`), an beiden Tastern (Esszimmer und Flur).
