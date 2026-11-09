@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.43.1';
+const VERSION = '2.44.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -269,7 +269,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .seg{all:unset;cursor:pointer;flex:1;text-align:center;padding:10px 8px;border-radius:12px;background:var(--tile);font-size:13.5px;font-weight:600;color:var(--fg)}
 .seg.on{background:var(--sun);color:#fff}
 .seg[disabled]{opacity:.45;cursor:default}
-.wbprio{margin-top:12px}.wbprio-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:13px}.wbprio-h span{color:var(--muted);font-size:12px;text-align:right}.segs-s{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
+.wbprio{margin-top:12px}.wbprio-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:13px}.wbprio-h span{color:var(--muted);font-size:12px;text-align:right}.wbdays{display:flex;gap:4px;margin:6px 0 4px}.wbdays .seg{flex:1;padding:8px 0;font-size:12.5px}.segs-s{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
 .wbn{margin-top:10px;padding:12px;border-radius:14px;background:var(--tile)}
 .wbn-h{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px}.wbn-h span{font-weight:700;font-size:18px;color:var(--grid)}
 .wbn input{width:100%;margin:10px 0 2px;accent-color:var(--grid)}
@@ -721,6 +721,10 @@ class ZuhauseCard extends HTMLElement {
       const wp = e.target.closest('[data-wbprio]');
       if (wp) { this._hass.callService('input_boolean', wp.dataset.wbprio === 'auto' ? 'turn_on' : 'turn_off', { entity_id: 'input_boolean.zuhause_solar_prioritaet_auto' }); return; }
       const ab = e.target.closest('[data-appbtn]'); if (ab) { this._hass.callService('button', 'press', { entity_id: ab.dataset.appbtn }); return; }
+      const wz = e.target.closest('[data-wbz]');
+      if (wz) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_zeit_' + (wz.dataset.wbz === 'ende' ? 'ende_aktiv' : 'aktiv') }); return; }
+      const wt = e.target.closest('[data-wbtag]');
+      if (wt) { const st = this._hass.states['input_text.zuhause_wallbox_zeit_tage']; const cur = new Set(String(st ? st.state : '0123456').split('').filter(c => /[0-6]/.test(c))); const d = wt.dataset.wbtag; cur.has(d) ? cur.delete(d) : cur.add(d); if (cur.size) this._hass.callService('input_text', 'set_value', { entity_id: 'input_text.zuhause_wallbox_zeit_tage', value: [...cur].sort().join('') }); return; }
       if (e.target.closest('[data-wbsperre]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_anker_entladen_sperren' }); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
@@ -2181,6 +2185,60 @@ class ZuhauseCard extends HTMLElement {
     }
     return { bool, auto, connected, note };
   }
+  // Zeitschaltung fürs Laden: ab Uhrzeit (optional bis Uhrzeit, an gewählten Wochentagen) volle Ladeleistung aus dem Netz; der Hausspeicher bleibt unberührt
+  _wbZeit(sel, pv, fast) {
+    const h = this._hass, S = h.states, g = k => S['input_' + k.split('.')[0] + '.zuhause_wallbox_zeit_' + k.split('.')[1]];
+    const akt = g('boolean.aktiv'), ende = g('boolean.ende_aktiv'), von = g('datetime.von'), bis = g('datetime.bis'), tage = g('text.tage');
+    if (!this._wbZT && h.user && h.user.is_admin && !(akt && ende && von && bis && tage && h.states['automation.zuhause_wallbox_zeitschaltung']) && pv && fast) this._wbZeitSetup(sel, pv, fast);
+    const hhmm = x => x && /^\d{1,2}:\d{2}/.test(String(x.state)) ? String(x.state).slice(0, 5).padStart(5, '0') : '';
+    const days = new Set(String(tage ? tage.state : '0123456').split('')), NM = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    const on = !!akt && akt.state === 'on', eOn = !!ende && ende.state === 'on';
+    const sub = !akt ? 'wird eingerichtet' : !on ? 'Aus' : `Lädt ab ${hhmm(von) || '–'}${eOn ? ' bis ' + (hhmm(bis) || '–') : ''} · ${days.size === 7 ? 'täglich' : NM.filter((n, i) => days.has(String(i))).join(' ')}`;
+    const tm = (x, lbl) => `<div class="row"><div class="txt"><b>${lbl}</b></div><input type="time" value="${hhmm(x)}" data-mottime="${x.entity_id}" aria-label="${lbl}" style="background:var(--line);color:var(--ink,inherit);color-scheme:light dark;border:0;border-radius:8px;padding:6px 10px;min-width:96px;font:inherit;font-size:14px"></div>`;
+    let d = '';
+    if (on && von) d = tm(von, 'Laden ab')
+      + (ende ? `<div class="row"><div class="txt"><b>Ende festlegen</b><div class="s" style="color:var(--muted);font-size:12px">${eOn ? 'Danach wieder PV-Laden' : 'Ohne Ende lädt es, bis das Auto voll ist'}</div></div><button class="tg" role="switch" aria-label="Ende festlegen" aria-checked="${eOn}" data-wbz="ende"></button></div>` : '')
+      + (eOn && bis ? tm(bis, 'Laden bis') : '')
+      + `<div class="wbdays">${NM.map((n, i) => `<button class="seg${days.has(String(i)) ? ' on' : ''}" data-wbtag="${i}" aria-pressed="${days.has(String(i))}">${n}</button>`).join('')}</div>`
+      + `<p class="sub" style="margin:4px 0 0;font-size:12px">Geladen wird mit voller Leistung aus dem Netz. Der Hausspeicher bleibt voll für die Nacht, solange „Speicher darf Auto mitladen“ aus ist.</p>`;
+    return `<div class="row" style="margin-top:10px"><div class="txt"><b>⏰ Zeitschaltung</b><div class="s" style="color:var(--muted);font-size:12px">${sub}</div></div><button class="tg" role="switch" aria-label="Zeitschaltung" aria-checked="${on}" ${akt ? '' : 'disabled'} data-wbz="aktiv"></button></div>${d}`;
+  }
+  async _wbZeitSetup(sel, pv, fast) {
+    const h = this._hass, S = h.states, L = this._lay, n = this._wbN();
+    if (this._wbZT || !L || !n.lim) return;
+    this._wbZT = true;
+    try {
+      const mk = (id, type, cfg) => S[id] ? null : h.callWS({ type: type + '/create', ...cfg });
+      await mk('input_boolean.zuhause_wallbox_zeit_aktiv', 'input_boolean', { name: 'Zuhause Wallbox Zeit aktiv', icon: 'mdi:timer-outline' });
+      await mk('input_boolean.zuhause_wallbox_zeit_ende_aktiv', 'input_boolean', { name: 'Zuhause Wallbox Zeit Ende aktiv', icon: 'mdi:timer-stop-outline' });
+      await mk('input_datetime.zuhause_wallbox_zeit_von', 'input_datetime', { name: 'Zuhause Wallbox Zeit von', has_date: false, has_time: true, initial: '22:00', icon: 'mdi:clock-start' });
+      await mk('input_datetime.zuhause_wallbox_zeit_bis', 'input_datetime', { name: 'Zuhause Wallbox Zeit bis', has_date: false, has_time: true, initial: '06:00', icon: 'mdi:clock-end' });
+      await mk('input_text.zuhause_wallbox_zeit_tage', 'input_text', { name: 'Zuhause Wallbox Zeit Tage', max: 20, initial: '0123456', icon: 'mdi:calendar-week' });
+      const st = this._wbEnt(['sensor'], /status ladevorgang|charging session status/i);
+      const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
+      const lim = n.lim.entity_id, selId = sel.entity_id;
+      const tageOk = "{{ now().weekday() | string in states('input_text.zuhause_wallbox_zeit_tage') }}";
+      const verb = st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s) }}` : '{{ true }}';
+      const fenster = "{% set v = states('input_datetime.zuhause_wallbox_zeit_von')[:5] %}{% set b = states('input_datetime.zuhause_wallbox_zeit_bis')[:5] %}{% set t = now().strftime('%H:%M') %}{{ (v <= t < b) if v < b else (t >= v or t < b) }}";
+      const start = [
+        ...(S['input_boolean.zuhause_wallbox_pv_regelung'] ? [{ action: 'input_boolean.turn_off', target: { entity_id: 'input_boolean.zuhause_wallbox_pv_regelung' } }] : []),
+        { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MAX } },
+        ...(en && du ? [{ action: 'number.set_value', target: { entity_id: en.entity_id }, data: { value: 100 } }, { action: 'number.set_value', target: { entity_id: du.entity_id }, data: { value: 545 } }] : []),
+        { action: 'select.select_option', target: { entity_id: selId }, data: { option: fast } }];
+      const T = t => ({ condition: 'template', value_template: t });
+      await h.callApi('POST', 'config/automation/config/zuhause_wallbox_zeitschaltung', {
+        id: 'zuhause_wallbox_zeitschaltung', alias: 'Zuhause: Wallbox Zeitschaltung', description: 'Angelegt vom Zuhause-Dashboard. Lädt ab der eingestellten Uhrzeit mit voller Leistung, optional bis zu einer Endzeit, an den gewählten Wochentagen.', mode: 'restart',
+        triggers: [{ trigger: 'time', at: 'input_datetime.zuhause_wallbox_zeit_von', id: 'start' }, { trigger: 'time', at: 'input_datetime.zuhause_wallbox_zeit_bis', id: 'ende' }, ...(st ? [{ trigger: 'state', entity_id: st.entity_id, id: 'steckt' }] : [])],
+        conditions: [{ condition: 'state', entity_id: 'input_boolean.zuhause_wallbox_zeit_aktiv', state: 'on' }],
+        actions: [{ choose: [
+          { conditions: [T("{{ trigger.id == 'start' }}"), T(tageOk), T(verb)], sequence: start },
+          { conditions: [T("{{ trigger.id == 'steckt' }}"), { condition: 'state', entity_id: 'input_boolean.zuhause_wallbox_zeit_ende_aktiv', state: 'on' }, T(tageOk), T(verb), T(fenster), T(`{{ states('${selId}') != '${fast}' }}`)], sequence: start },
+          { conditions: [T("{{ trigger.id == 'ende' }}"), { condition: 'state', entity_id: 'input_boolean.zuhause_wallbox_zeit_ende_aktiv', state: 'on' }], sequence: [
+            { action: 'select.select_option', target: { entity_id: selId }, data: { option: pv } }, { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MAX } }] },
+        ] }],
+      });
+    } catch (e) { console.warn('zuhause-card: Zeitschaltung einrichten', e); }
+  }
   _renderWbMode() {
     const k = this._k.wbmode; if (!k) return;
     this._wbSess();
@@ -2206,7 +2264,8 @@ class ZuhauseCard extends HTMLElement {
       this._hass.callWS({ type: 'input_boolean/create', name: 'Zuhause Anker Entladen sperren', icon: 'mdi:battery-lock' }).catch(e => console.warn('zuhause-card: Entladen sperren', e));
     }
     const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
-    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>` + prHtml + spHtml
+    const zH = this._wbZeit(sel, pv, fast);
+    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>` + prHtml + zH + spHtml
       + (this._wbNOpen && n.num ? `<div class="wbn"><div class="wbn-h"><b>Netzanteil beim PV-Laden</b><span data-k2="wbnv">${n.share} %</span></div>
         <input type="range" min="0" max="100" step="10" value="${n.share}" data-wbn="${n.num.entity_id}" aria-label="Netzanteil">
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
