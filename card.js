@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.44.0';
+const VERSION = '2.44.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -731,7 +731,10 @@ class ZuhauseCard extends HTMLElement {
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) {
         if (this._wbLong) { this._wbLong = false; return; }
-        const [eid, opt] = wm.dataset.wbmode.split('|'); this._setWbMode(eid, opt); return;
+        const [eid, opt] = wm.dataset.wbmode.split('|');
+        const zt = this._hass.states['input_boolean.zuhause_wallbox_zeit_aktiv'], zv = this._hass.states['input_datetime.zuhause_wallbox_zeit_von'];
+        if (zt && zt.state === 'on' && !/optimiert|optimized/i.test(opt) && !confirm('Die Zeitschaltung ist an' + (zv ? ' und lädt ab ' + String(zv.state).slice(0, 5) : '') + '. „Sofort“ lädt jetzt gleich. Willst du das?\n\nSonst auf PV-Laden lassen, dann wartet die Wallbox bis zur Startzeit.')) return;
+        this._setWbMode(eid, opt); return;
       }
       const nt = e.target.closest('[data-notiftg]');
       if (nt) { this._hass.callService('automation', nt.getAttribute('aria-checked') === 'true' ? 'turn_off' : 'turn_on', { entity_id: nt.dataset.notiftg }); return; }
@@ -2200,7 +2203,7 @@ class ZuhauseCard extends HTMLElement {
       + (ende ? `<div class="row"><div class="txt"><b>Ende festlegen</b><div class="s" style="color:var(--muted);font-size:12px">${eOn ? 'Danach wieder PV-Laden' : 'Ohne Ende lädt es, bis das Auto voll ist'}</div></div><button class="tg" role="switch" aria-label="Ende festlegen" aria-checked="${eOn}" data-wbz="ende"></button></div>` : '')
       + (eOn && bis ? tm(bis, 'Laden bis') : '')
       + `<div class="wbdays">${NM.map((n, i) => `<button class="seg${days.has(String(i)) ? ' on' : ''}" data-wbtag="${i}" aria-pressed="${days.has(String(i))}">${n}</button>`).join('')}</div>`
-      + `<p class="sub" style="margin:4px 0 0;font-size:12px">Geladen wird mit voller Leistung aus dem Netz. Der Hausspeicher bleibt voll für die Nacht, solange „Speicher darf Auto mitladen“ aus ist.</p>`;
+      + `<p class="sub" style="margin:4px 0 0;font-size:12px">Modus ☀ PV-Laden stehen lassen: die Wallbox wartet dann bis zur Startzeit und lädt erst dann. „Sofort“ lädt gleich. Geladen wird mit voller Leistung aus dem Netz. Der Hausspeicher bleibt voll für die Nacht, solange „Speicher darf Auto mitladen“ aus ist.</p>`;
     return `<div class="row" style="margin-top:10px"><div class="txt"><b>⏰ Zeitschaltung</b><div class="s" style="color:var(--muted);font-size:12px">${sub}</div></div><button class="tg" role="switch" aria-label="Zeitschaltung" aria-checked="${on}" ${akt ? '' : 'disabled'} data-wbz="aktiv"></button></div>${d}`;
   }
   async _wbZeitSetup(sel, pv, fast) {
@@ -2265,7 +2268,8 @@ class ZuhauseCard extends HTMLElement {
     }
     const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
     const zH = this._wbZeit(sel, pv, fast);
-    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, '⚡ Schnell')}</div>` + prHtml + zH + spHtml
+    const ztOn = (S0 => S0['input_boolean.zuhause_wallbox_zeit_aktiv'] && S0['input_boolean.zuhause_wallbox_zeit_aktiv'].state === 'on')(this._hass.states);
+    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, ztOn ? '⚡ Sofort' : '⚡ Schnell')}</div>` + prHtml + zH + spHtml
       + (this._wbNOpen && n.num ? `<div class="wbn"><div class="wbn-h"><b>Netzanteil beim PV-Laden</b><span data-k2="wbnv">${n.share} %</span></div>
         <input type="range" min="0" max="100" step="10" value="${n.share}" data-wbn="${n.num.entity_id}" aria-label="Netzanteil">
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
