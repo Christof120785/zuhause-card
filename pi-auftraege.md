@@ -12,6 +12,14 @@ Regeln für alle Aufträge:
 
 ---
 
+## A12 · 2026-11-09 · Wandtaster Wohnzimmer: Umschalten statt nur Einschalten · Status: offen
+
+Die Automationen `wandtaster_wohnzimmer_klein` und `wandtaster_wohnzimmer_gross` (aus A11) schalten das Licht nur ein. Christof will es aus- und einschalten können.
+1. Ändere beide Automationen so, dass ein kurzer Tastendruck das Licht umschaltet (`light.toggle` statt `light.turn_on`), an beiden Tastern (Esszimmer und Flur).
+2. Teste es für beide Lichter und beide Taster: Taste drücken, Licht geht an, Taste nochmal drücken, Licht geht aus.
+3. Schalten Hue/Homematic dabei doppelt (Taste löst zwei Mal aus, Licht geht sofort wieder an)? Dann entprelle es (zum Beispiel Modus `single` mit kurzer Wartezeit) und sage mir, was du getan hast.
+4. Aktualisiere den Eintrag in /config/wo-ist-was-programmiert.md.
+
 ## A11 · 2026-11-09 · Wandtaster: Wohnzimmer-Lichter einschalten · Status: erledigt
 
 Christof hat einen Homematic-Wandtaster mit sechs Tasten (zwei Spalten, drei Reihen, Beschriftung: Esszimmer, Flur, Carport, Carport gesperrt). Zwei Tasten sollen Lichter im Wohnzimmer einschalten:
