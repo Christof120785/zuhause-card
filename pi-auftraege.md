@@ -12,6 +12,17 @@ Regeln für alle Aufträge:
 
 ---
 
+## A11 · 2026-11-09 · Wandtaster: Wohnzimmer-Lichter einschalten · Status: offen
+
+Christof hat einen Homematic-Wandtaster mit sechs Tasten (zwei Spalten, drei Reihen, Beschriftung: Esszimmer, Flur, Carport, Carport gesperrt). Zwei Tasten sollen Lichter im Wohnzimmer einschalten:
+- Taste Mitte links: Licht „kleines Wohnzimmer“ einschalten.
+- Taste unten links: Licht „großes Wohnzimmer“ einschalten.
+1. Finde den Taster in Home Assistant (Homematic-Integration, Ereignis- oder Event-Entitäten der Tastenkanäle). Finde heraus, welcher Kanal „Mitte links“ und welcher „unten links“ ist (nummeriert meist zeilenweise von oben links; prüfe es, indem du Christof eine Taste drücken lässt und im Protokoll nachsiehst, welcher Kanal kommt).
+2. Finde die passenden Lichter (kleines und großes Wohnzimmer, vermutlich Hue). Passen die Namen nicht eindeutig, frage Christof.
+3. Lege pro Taste eine Home-Assistant-Automation an (Kurzer Tastendruck schaltet das Licht ein). Soll ein Druck bei eingeschaltetem Licht ausschalten (umschalten), sage es Christof als Vorschlag, ändere es aber nur, wenn er es will.
+4. Prüfe im Homematic-Programm der Zentrale (CCU), ob diese Tasten dort schon etwas auslösen. Wenn ja, sage mir, was; ändere es nicht ohne meine Antwort.
+5. Trage die Automationen in /config/wo-ist-was-programmiert.md ein.
+
 ## A9 · 2026-11-07 · Flurlicht geht nach dem Ausschalten nicht sofort wieder an · Status: offen
 
 Wenn Christof im Flur unten hoch und runter läuft und das Licht gerade aus ist, geht es bei der nächsten Bewegung nicht sofort wieder an. Er will wissen, wie viel Zeit zwischen Ausschalten und dem nächsten Einschalten vergeht, und sie möglichst klein haben (am liebsten sofort).
