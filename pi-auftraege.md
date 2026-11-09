@@ -12,7 +12,7 @@ Regeln für alle Aufträge:
 
 ---
 
-## A11 · 2026-11-09 · Wandtaster: Wohnzimmer-Lichter einschalten · Status: offen
+## A11 · 2026-11-09 · Wandtaster: Wohnzimmer-Lichter einschalten · Status: erledigt
 
 Christof hat einen Homematic-Wandtaster mit sechs Tasten (zwei Spalten, drei Reihen, Beschriftung: Esszimmer, Flur, Carport, Carport gesperrt). Zwei Tasten sollen Lichter im Wohnzimmer einschalten:
 - Taste Mitte links: Licht „kleines Wohnzimmer“ einschalten.
