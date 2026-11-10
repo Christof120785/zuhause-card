@@ -12,6 +12,15 @@ Regeln für alle Aufträge:
 
 ---
 
+## A14 · 2026-11-10 · Warum hat die Zeitschaltung um 06:00 nicht geladen? · Status: offen
+
+Christof hat die Zeitschaltung fürs Laden (Startzeit 06:00) benutzt, aber die Wallbox hat um 06:00 nicht geladen; das Auto zeigte „lädt nicht“ (Zeitplan im Auto ist aus). Er hat dann von Hand umgeschaltet. Wallbox und Home Assistant sind erreichbar, es geht nur um die Regel.
+1. Prüfe die Automation `zuhause_wallbox_zeitschaltung`: gibt es sie, ist sie an, und was zeigt die Ablaufverfolgung/das Protokoll für heute 06:00 (lief sie, welcher Zweig, welche Bedingung hat sie gestoppt)?
+2. Prüfe die Helfer: `input_boolean.zuhause_wallbox_zeit_aktiv` (an?), `input_datetime.zuhause_wallbox_zeit_von` (stand wirklich 06:00?), `input_text.zuhause_wallbox_zeit_tage` (heute Dienstag = 1, ist die 1 enthalten?) und `input_boolean.zuhause_wallbox_zeit_ende_aktiv`.
+3. Die Regel startet nur, wenn das Auto als angesteckt erkannt wird (Status Ladevorgang). Prüfe, welchen Text dieser Sensor im angesteckten Zustand hat und ob die Bedingung der Automation das als „verbunden“ erkennt (Bedingung `verb`).
+4. Prüfe, ob die Regel die Wallbox wirklich auf „Laden mit Vorgabe“ gestellt hat und ob danach etwas anderes (zum Beispiel `zuhause_wallbox_netzanteil` oder `zuhause_wallbox_pv_nach_abstecken`) sie sofort zurückgestellt hat.
+5. Behebe, was in Home Assistant liegt (die Automation darfst du anpassen), und sage mir in drei Sätzen die Ursache. Liegt der Fehler im Karten-Code, beschreibe ihn genau, ändere die Karte nicht.
+
 ## A13 · 2026-11-10 · Zeitschaltung hat nicht geladen, „Sofort“ geht nicht, Zugriff über die IP geht nicht · Status: abgebrochen
 
 Christof meldet am Morgen: Die Zeitschaltung fürs Laden (Start 06:00) hat nicht geladen, „Sofort laden“ geht auch nicht, und Home Assistant ist über die IP-Adresse nicht erreichbar. Nachtrag: Mit „IP“ meint Christof die Adresse der Wallbox (SMA EV Charger), nicht die des Pi: Die Wallbox ist über ihre IP nicht erreichbar. Wahrscheinlichste Ursache ist deshalb, dass die Wallbox nicht im Netzwerk war (Strom, WLAN/Kabel, neue IP von der Fritz!Box). Prüfe als Erstes, ob die SMA-Integration die Wallbox erreicht (Entitäten „nicht verfügbar“?), welche IP sie hat und ob die Fritz!Box sie noch als verbunden listet, und ob die Integration auf die alte IP zeigt. Sag Christof, wenn er vor Ort etwas tun muss (Wallbox spannungsfrei machen, Kabel prüfen). Nachtrag 2: Auch die Reolink-Kamera (Haustür) ist nicht erreichbar. Suche eine gemeinsame Ursache von Wallbox und Reolink: gleiches Netzsegment oder WLAN-Zugangspunkt/Repeater/Switch, die Fritz!Box (Geräteliste: welche Geräte sind offline, gibt es Gast- oder Mesh-Probleme), neue IP-Adressen (DHCP), und ob Home Assistant selbst die Geräte noch anpingen kann (zum Beispiel `ping` aus dem Terminal) und die Integrationen auf die richtigen Adressen zeigen. Sage mir, welche Geräte außer diesen beiden noch offline sind, und ob ich etwas vor Ort tun muss (Router, Repeater oder Zugangspunkt neu starten). Vermutlich hängt alles zusammen (Home Assistant war oder ist nicht erreichbar oder neu gestartet).
