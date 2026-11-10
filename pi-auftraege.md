@@ -12,6 +12,15 @@ Regeln für alle Aufträge:
 
 ---
 
+## A13 · 2026-11-10 · Zeitschaltung hat nicht geladen, „Sofort“ geht nicht, Zugriff über die IP geht nicht · Status: offen
+
+Christof meldet am Morgen: Die Zeitschaltung fürs Laden (Start 06:00) hat nicht geladen, „Sofort laden“ geht auch nicht, und Home Assistant ist über die IP-Adresse nicht erreichbar. Vermutlich hängt alles zusammen (Home Assistant war oder ist nicht erreichbar oder neu gestartet).
+1. Prüfe zuerst, ob Home Assistant gesund ist: Uptime und letzter Neustart (Protokoll, `ha core info`, `ha host info`), Fehlermeldungen in der Nacht, Netzwerk (hat der Pi noch dieselbe IP und ist er per Kabel/WLAN verbunden), freier Speicher, Temperatur. Gab es ein Update oder einen Absturz? Sage mir die Uhrzeit des letzten Neustarts und die Ursache.
+2. Prüfe die Automation `zuhause_wallbox_zeitschaltung`: existiert sie und ist sie an, wann lief sie zuletzt (Protokoll/Ablaufverfolgung), und was ist um 06:00 passiert? Prüfe die Helfer `input_boolean.zuhause_wallbox_zeit_aktiv`, `input_datetime.zuhause_wallbox_zeit_von`/`_bis`, `input_text.zuhause_wallbox_zeit_tage` (Wochentag 0 = Montag) und ob das Auto angesteckt war.
+3. Prüfe, warum „Sofort“ nicht geht: Betriebsart-Auswahl der Wallbox, Ladeleistung, Drehschalter an der Wallbox (steht er auf Schnellladen, sperrt er die Umschaltung), Verbindung der Wallbox zu Home Assistant (SMA-Integration erreichbar?).
+4. Behebe, was du von Home Assistant aus beheben kannst. Ändere nichts an der Dashboard-Karte.
+5. Sage mir am Ende in drei Sätzen die Ursache und ob ich etwas tun muss. Ist der Pi selbst nicht erreichbar, sage mir genau, was ich vor Ort prüfen soll.
+
 ## A12 · 2026-11-09 · Wandtaster Wohnzimmer: Umschalten statt nur Einschalten · Status: erledigt
 
 Die Automationen `wandtaster_wohnzimmer_klein` und `wandtaster_wohnzimmer_gross` (aus A11) schalten das Licht nur ein. Christof will es aus- und einschalten können.
