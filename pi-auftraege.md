@@ -12,6 +12,16 @@ Regeln für alle Aufträge:
 
 ---
 
+## A15 · 2026-11-10 · Auto morgens zuverlässig zum Laden bringen (sleep_mode) · Status: offen
+
+Die Zeitschaltung `zuhause_wallbox_zeitschaltung` setzt um die Startzeit korrekt „Laden mit Vorgabe“ (setpoint_charging), aber der Polestar bleibt im Zustand sleep_mode und lädt nicht, bis man am Drehschalter der Wallbox von Hand auf Schnellladen dreht (das weckt das Auto). Christof will, dass die Zeitschaltung das künftig selbst schafft.
+1. Finde heraus, was beim Drehen auf Schnellladen anders ist als bei unserer Regel (zum Beispiel Statuswechsel der Wallbox, Ladefreigabe, kurzes Trennen/Neustarten des Ladesignals). Schau dazu im Protokoll von heute 06:57 nach, welche Entitäten sich geändert haben.
+2. Prüfe, ob es in Home Assistant etwas gibt, das den Polestar weckt (Polestar-Integration: Taste, Schalter oder Dienst zum Aufwecken, Klimatisierung kurz starten, Ladeanforderung). Nenne mir, was es gibt.
+3. Baue in die Startabfolge der Zeitschaltung einen Wiederholversuch ein: Steht die Wallbox zwei Minuten nach dem Start noch auf sleep_mode (statt active_mode/charging), dann Ladefreigabe der Wallbox (manuelle Ladefreigabe, falls vorhanden, sonst Modus kurz auf Stopp oder PV und zurück auf Laden mit Vorgabe) für etwa 10 Sekunden aus- und wieder einschalten. Bis zu drei Versuche im Abstand von zwei Minuten. Nutze zusätzlich eine Aufwecken-Möglichkeit aus Schritt 2, falls es sie gibt.
+4. Meldung an beide Handys (wie bei der 5-Minuten-Prüfung), wenn es nach den Versuchen nicht lädt, und kurze Meldung, wenn es erst beim zweiten oder dritten Versuch geklappt hat.
+5. Teste, wenn möglich, mit dem angesteckten Auto (zum Beispiel jetzt Ladung beenden und die Abfolge auslösen) und sage mir das Ergebnis. Die Dashboard-Karte nicht ändern, und die 5-Minuten-Prüfung nicht entfernen.
+6. Schreibe die Änderung in /config/wo-ist-was-programmiert.md und nenne mir in drei Sätzen, ob ich etwas tun muss (zum Beispiel im Polestar die eigene Ladeplanung für diese Zeit anpassen).
+
 ## A14 · 2026-11-10 · Warum hat die Zeitschaltung um 06:00 nicht geladen? · Status: erledigt
 
 Christof hat die Zeitschaltung fürs Laden (Startzeit 06:00) benutzt, aber die Wallbox hat um 06:00 nicht geladen; das Auto zeigte „lädt nicht“ (Zeitplan im Auto ist aus). Er hat dann von Hand umgeschaltet. Wallbox und Home Assistant sind erreichbar, es geht nur um die Regel.
