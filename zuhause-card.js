@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.44.2';
+const VERSION = '2.45.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1416,10 +1416,10 @@ class ZuhauseCard extends HTMLElement {
   _renderApp() {
     const k = this._k; if (!k.app) return;
     const all = Object.values(this._hass.states);
-    const DEV = [['Waschmaschine', /waschmaschine|washer|washing/i, '🧺', 'Wird nächste Woche verbunden'], ['Trockner', /trockner|dryer/i, '♨', 'Noch nicht verbunden']];
+    const DEV = [['Waschmaschine', /waschmaschine|washer|washing/i, '🧺', 'Noch nicht verbunden'], ['Trockner', /trockner|dryer/i, '♨', 'Noch nicht verbunden']];
     const nm = x => x.entity_id + ' ' + (x.attributes.friendly_name || '');
     const ok = x => x && !['unknown', 'unavailable', ''].includes(x.state);
-    const MS = { off: 'Aus', standby: 'Bereit', running: 'Läuft', paused: 'Pausiert', finished: 'Fertig', idle: 'Bereit', ready: 'Bereit', delay_start_waiting: 'Startzeit gewählt', anti_crease: 'Knitterschutz', error: 'Fehler', on: 'An' };
+    const MS = { off: 'Aus', standby: 'Bereit', running: 'Läuft', paused: 'Pausiert', finished: 'Fertig', idle: 'Bereit', ready: 'Bereit', delay_start_waiting: 'Startzeit gewählt', anti_crease: 'Knitterschutz', error: 'Fehler', on: 'An', run: 'Läuft', inactive: 'Bereit', pause: 'Pausiert', actionrequired: 'Eingriff nötig', delayedstart: 'Startzeit gewählt', aborting: 'Bricht ab' };
     const tr = v => MS[String(v).toLowerCase()] || v;
     const mins = x => { const n = +x.state; if (!isFinite(n)) return x.state; const u = x.attributes.unit_of_measurement; const m = u === 's' ? Math.round(n / 60) : u === 'h' ? Math.round(n * 60) : Math.round(n); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'; };
     const row = ([label, re, ic, ph]) => {
@@ -1427,14 +1427,16 @@ class ZuhauseCard extends HTMLElement {
       if (!es.length) return `<div class="row"><div class="txt"><b>${ic} ${label}</b><div class="s" style="color:var(--muted);font-size:12px">${ph}</div></div><span class="sub">–</span></div>`;
       const dom = (d, r) => es.find(x => x.entity_id.startsWith(d + '.') && r.test(nm(x)));
       const stat = dom('sensor', /maschinenstatus|machine.?status|status|zustand|operation/i), phase = dom('sensor', /programmphase|phase/i);
-      const rem = dom('sensor', /verbleibend|restzeit|remaining/i), prg = dom('select', /programm|program/i) || dom('sensor', /^sensor\.[^ ]*(programm|program)(?!phase)/i);
+      const rem = dom('sensor', /verbleibend|restzeit|remaining/i), prg = dom('select', /aktives.?programm|active.?program/i) || dom('select', /programm|program/i) || dom('sensor', /^sensor\.[^ ]*(programm|program)(?!phase)/i);
       const door = dom('binary_sensor', /t(ü|u)r|door/i), tank = dom('binary_sensor', /wasserbeh|water.?tank|container/i), filt = dom('binary_sensor', /filter/i);
-      const run = stat && stat.state === 'running';
+      const run = stat && ['running', 'run'].includes(stat.state);
+      const pct = dom('sensor', /fortschritt|progress/i), endt = dom('sensor', /endzeit|end.?time|finish/i), doorS = dom('sensor', /_t(ü|u|ue)r$/i), dosis = es.filter(x => x.entity_id.startsWith('sensor.') && /i_?dos|fullstand|fill/i.test(x.entity_id) && /empty|leer/i.test(x.state));
+      const endTxt = run && endt && ok(endt) && !isNaN(Date.parse(endt.state)) ? 'fertig um ' + new Date(endt.state).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
       const head = stat && ok(stat) ? tr(stat.state) : 'nicht erreichbar';
-      const sub = [prg && ok(prg) && !/^(none|keiner?|-)$/i.test(prg.state) && prg.state, run && rem && ok(rem) && 'noch ' + mins(rem), !run && phase && ok(phase) && !['idle', 'off'].includes(phase.state) && tr(phase.state)].filter(Boolean).join(' · ');
-      const warn = [tank && tank.state === 'on' && 'Wasserbehälter leeren', filt && filt.state === 'on' && 'Filter reinigen', door && door.state === 'on' && 'Tür offen'].filter(Boolean);
+      const sub = [prg && ok(prg) && !/^(none|keiner?|-)$/i.test(prg.state) && prg.state, run && rem && ok(rem) && 'noch ' + mins(rem), run && !rem && endTxt, run && pct && ok(pct) && !isNaN(+pct.state) && Math.round(+pct.state) + ' %', !run && phase && ok(phase) && !['idle', 'off'].includes(phase.state) && tr(phase.state)].filter(Boolean).join(' · ');
+      const warn = [tank && tank.state === 'on' && 'Wasserbehälter leeren', filt && filt.state === 'on' && 'Filter reinigen', door && door.state === 'on' && 'Tür offen', doorS && /^(open|offen)$/i.test(doorS.state) && 'Tür offen', dosis.length && 'Waschmittel im i-Dos fast leer'].filter(Boolean);
       const bt = (r, t) => { const b = es.find(x => x.entity_id.startsWith('button.') && r.test(x.entity_id) && x.state !== 'unavailable'); return b ? `<button class="seg" data-appbtn="${b.entity_id}">${t}</button>` : ''; };
-      const btns = bt(/_start$/i, 'Start') + bt(/_pause$/i, 'Pause') + bt(/_(stopp|stop)$/i, 'Stopp');
+      const btns = bt(/_start$/i, 'Start') + bt(/_pause$/i, 'Pause') + bt(/_(stopp|stop|stoppen)$/i, 'Stopp');
       return `<div class="row" style="flex-wrap:wrap"><div class="txt"><b>${ic} ${label}</b>${sub ? `<div class="s" style="color:var(--muted);font-size:12px">${sub}</div>` : ''}${warn.length ? `<div class="s" style="color:var(--warn,#c77d18);font-size:12px">${warn.join(' · ')}</div>` : ''}</div><span class="sub" style="text-align:right;${run ? 'color:var(--ok,#3a9b63);font-weight:600' : ''}">${head}</span>${btns ? `<div class="segs" style="flex:0 0 100%;margin-top:6px">${btns}</div>` : ''}</div>`;
     };
     const out = DEV.map(row).join('');

@@ -123,7 +123,7 @@ Prüfe, ob sich die Ladeleistung des Ankers dafür steuern lässt, und sage mir,
 
 Der Schalter `input_boolean.zuhause_anker_entladen_sperren` existiert, tut aber noch nichts. Solange er an ist, soll der Anker-Speicher nichts ans Haus abgeben und nur laden, genau wie bei der bestehenden Automation „Hausakku lädt das Auto nicht“ (Betriebsmodus benutzerdefiniert, Leistungssteuerung 0 W, danach zurück in den vorherigen Modus). Nutze dasselbe Verfahren und denselben Merker `input_text.zuhause_anker_modus_vorher`, damit sich beide Regeln nicht in die Quere kommen. Ist der Schalter aus und lädt das Auto nicht, läuft alles wie vorher.
 
-## A2 · 2026-11-07 · Waschmaschine über Home Connect · Status: wartet
+## A2 · 2026-11-07 · Waschmaschine über Home Connect · Status: erledigt
 
 Wartet, bis die Siemens-Waschmaschine da und in der Home-Connect-App angemeldet ist (nächste Woche). Dann: Binde sie über die eingebaute Home-Connect-Integration ein und schreibe mir eine Liste aller Einträge mit Name und aktuellem Wert. Das Home-Connect-Konto hat Christof schon.
 
