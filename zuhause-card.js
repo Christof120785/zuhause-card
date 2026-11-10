@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.44.1';
+const VERSION = '2.44.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -2074,7 +2074,7 @@ class ZuhauseCard extends HTMLElement {
     h.callApi('POST', 'config/automation/config/' + id, {
       id, alias: 'Zuhause: Wallbox nach dem Abstecken auf PV-Laden', description: 'Angelegt vom Zuhause-Dashboard', mode: 'single',
       triggers: [{ trigger: 'state', entity_id: st.entity_id, not_from: ['unavailable', 'unknown'] }],
-      conditions: [{ condition: 'template', value_template: "{% set s = trigger.to_state.state | lower %}{{ ('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s }}" },
+      conditions: [{ condition: 'template', value_template: "{% set s = trigger.to_state.state | lower %}{{ ('nicht' in s and 'verbunden' in s) or ('not connected' in s or 'not_connected' in s) or 'getrennt' in s }}" },
         { condition: 'template', value_template: `{{ states('${sel.entity_id}') != '${pv}' }}` }],
       actions: [{ action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: pv } }],
     }).catch(() => { this._wbAutoT = false; });
@@ -2134,7 +2134,7 @@ class ZuhauseCard extends HTMLElement {
         variables: {
           share: "{{ states('input_number.zuhause_wallbox_netzanteil') | float(0) }}",
           aktiv: "{{ is_state('input_boolean.zuhause_wallbox_pv_regelung', 'on') and states('input_number.zuhause_wallbox_netzanteil') | float(0) > 0 }}",
-          verbunden: st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s) }}` : '{{ true }}',
+          verbunden: st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or ('not connected' in s or 'not_connected' in s) or 'getrennt' in s) }}` : '{{ true }}',
           frei: `{{ ${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)}${akku.length ? ` - (0 if is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on') else (${akku.join(' + ')}))` : ''} }}`,
           ziel: `{{ ${WB_MAX} if share >= 100 else (frei / (1 - share / 100)) | int }}`,
           neu: `{{ [[(ziel / 100) | round(0) * 100, ${WB_MIN}] | max, ${WB_MAX}] | min | int }}`,
@@ -2196,7 +2196,7 @@ class ZuhauseCard extends HTMLElement {
     const h = this._hass, bool = h.states['input_boolean.zuhause_solar_prioritaet_auto'];
     const st = this._wbEnt(['sensor'], /status ladevorgang|charging session status/i);
     const s = st ? String(st.state).toLowerCase() : '';
-    const connected = !st ? null : !(['unknown', 'unavailable', ''].includes(s) || (s.includes('nicht') && s.includes('verbunden')) || s.includes('not connected') || s.includes('getrennt'));
+    const connected = !st ? null : !(['unknown', 'unavailable', ''].includes(s) || (s.includes('nicht') && s.includes('verbunden')) || s.includes('not connected') || s.includes('not_connected') || s.includes('getrennt'));
     const auto = !!bool && bool.state === 'on';
     const note = !bool ? 'wird eingerichtet' : connected === false ? 'kein Auto: Batterie lädt' : auto ? 'Auto zuerst, Rest in die Batterie' : 'Batterie zuerst, Rest ins Auto';
     if (!bool && !this._wbPrioT && h.user && h.user.is_admin) {
@@ -2238,7 +2238,7 @@ class ZuhauseCard extends HTMLElement {
       const en = this._wbEnt(['number'], /energiemenge/i), du = this._wbEnt(['number'], /dauer des ladevorg/i);
       const lim = n.lim.entity_id, selId = sel.entity_id;
       const tageOk = "{{ now().weekday() | string in states('input_text.zuhause_wallbox_zeit_tage') }}";
-      const verb = st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or 'not connected' in s or 'getrennt' in s) }}` : '{{ true }}';
+      const verb = st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or ('not connected' in s or 'not_connected' in s) or 'getrennt' in s) }}` : '{{ true }}';
       const fenster = "{% set v = states('input_datetime.zuhause_wallbox_zeit_von')[:5] %}{% set b = states('input_datetime.zuhause_wallbox_zeit_bis')[:5] %}{% set t = now().strftime('%H:%M') %}{{ (v <= t < b) if v < b else (t >= v or t < b) }}";
       const start = [
         ...(S['input_boolean.zuhause_wallbox_pv_regelung'] ? [{ action: 'input_boolean.turn_off', target: { entity_id: 'input_boolean.zuhause_wallbox_pv_regelung' } }] : []),

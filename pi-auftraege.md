@@ -12,7 +12,7 @@ Regeln für alle Aufträge:
 
 ---
 
-## A14 · 2026-11-10 · Warum hat die Zeitschaltung um 06:00 nicht geladen? · Status: offen
+## A14 · 2026-11-10 · Warum hat die Zeitschaltung um 06:00 nicht geladen? · Status: erledigt
 
 Christof hat die Zeitschaltung fürs Laden (Startzeit 06:00) benutzt, aber die Wallbox hat um 06:00 nicht geladen; das Auto zeigte „lädt nicht“ (Zeitplan im Auto ist aus). Er hat dann von Hand umgeschaltet. Wallbox und Home Assistant sind erreichbar, es geht nur um die Regel.
 1. Prüfe die Automation `zuhause_wallbox_zeitschaltung`: gibt es sie, ist sie an, und was zeigt die Ablaufverfolgung/das Protokoll für heute 06:00 (lief sie, welcher Zweig, welche Bedingung hat sie gestoppt)?
