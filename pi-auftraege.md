@@ -12,6 +12,14 @@ Regeln für alle Aufträge:
 
 ---
 
+## A16 · 2026-11-10 · Meldung „Sensoren werden abgerufen“ auf Handy und Uhr abstellen · Status: offen
+
+Christof bekam gegen 07:00 auf dem Handy und der Uhr eine Meldung „Sensoren werden abgerufen“ und will sie nicht sehen. Die Dashboard-Karte sendet so etwas nicht, es kommt aus Home Assistant selbst.
+1. Finde die Quelle: Suche in allen Automationen, Skripten und Blueprints nach `notify.mobile_app_*` mit `message: command_update_sensors` oder `request_location_update` (auch neue Teile aus A14/A15 und der 5-Minuten-Prüfung), und prüfe das Protokoll um 07:00.
+2. Wird die Meldung durch eine eigene Automation ausgelöst, ändere sie so, dass nichts angezeigt wird. Für `command_update_sensors` in der Android-App gibt es keine sichtbare Meldung, wenn die Berechtigung der App passt; ist sie sichtbar, prüfe die Einstellungen in der Companion-App (Benachrichtigungskanal „Sensor-Aktualisierung“ stumm schalten) und sage Christof genau, wo er klicken muss.
+3. Meldungen, die er will (Haustür, Carportlicht, Alarm, Wallbox lädt nicht) bleiben unverändert.
+4. Sage mir in zwei Sätzen, woher die Meldung kam und was du geändert hast.
+
 ## A15 · 2026-11-10 · Auto morgens zuverlässig zum Laden bringen (sleep_mode) · Status: offen
 
 Die Zeitschaltung `zuhause_wallbox_zeitschaltung` setzt um die Startzeit korrekt „Laden mit Vorgabe“ (setpoint_charging), aber der Polestar bleibt im Zustand sleep_mode und lädt nicht, bis man am Drehschalter der Wallbox von Hand auf Schnellladen dreht (das weckt das Auto). Christof will, dass die Zeitschaltung das künftig selbst schafft.
