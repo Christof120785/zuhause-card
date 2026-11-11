@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.45.0';
+const VERSION = '2.45.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -667,6 +667,7 @@ class ZuhauseCard extends HTMLElement {
         const mv = ev => { if (Math.abs(ev.clientY - y0) > 8 || Math.abs(ev.clientX - x0) > 8) clearTimeout(this._wbLp); };
         pb.addEventListener('pointermove', mv);
         pb.addEventListener('pointerup', () => { clearTimeout(this._wbLp); pb.removeEventListener('pointermove', mv); }, { once: true });
+        this._wbLpUntil = Date.now() + 600;
         this._wbLp = setTimeout(() => { this._wbLong = true; this._wbNOpen = true; if (navigator.vibrate) navigator.vibrate(15); this._renderWbMode(); }, 500);
       }
     });
@@ -745,6 +746,7 @@ class ZuhauseCard extends HTMLElement {
       if (e.target.closest('[data-wbsperre]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_anker_entladen_sperren' }); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
+      if (e.target.closest('[data-wbgear]')) { this._wbNOpen = !this._wbNOpen; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) {
         if (this._wbLong) { this._wbLong = false; return; }
@@ -2263,6 +2265,7 @@ class ZuhauseCard extends HTMLElement {
   }
   _renderWbMode() {
     const k = this._k.wbmode; if (!k) return;
+    if (Date.now() < (this._wbLpUntil || 0)) { clearTimeout(this._wbLpR); this._wbLpR = setTimeout(() => this._renderWbMode(), 650); return; }
     this._wbSess();
     const sel = this._wbEnt(['select'], /betriebsart des ladevorgangs|charging mode|operating mode of charge/i);
     if (!sel) { if (k.innerHTML) k.innerHTML = ''; return; }
@@ -2288,13 +2291,13 @@ class ZuhauseCard extends HTMLElement {
     const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
     const zH = this._wbZeit(sel, pv, fast);
     const ztOn = (S0 => S0['input_boolean.zuhause_wallbox_zeit_aktiv'] && S0['input_boolean.zuhause_wallbox_zeit_aktiv'].state === 'on')(this._hass.states);
-    const html = `<div class="segs">${btn(pv, pvl)}${btn(fast, ztOn ? '⚡ Sofort' : '⚡ Schnell')}</div>` + prHtml + zH + spHtml
-      + (this._wbNOpen && n.num ? `<div class="wbn"><div class="wbn-h"><b>Netzanteil beim PV-Laden</b><span data-k2="wbnv">${n.share} %</span></div>
+    const gear = n.num ? `<button class="seg${this._wbNOpen ? ' on' : ''}" data-wbgear aria-label="Netzanteil einstellen" aria-expanded="${!!this._wbNOpen}" style="flex:0 0 46px;padding:0">⚙</button>` : '';
+    const html = `<div style="display:flex;gap:8px;align-items:stretch"><div class="segs" style="flex:1">${btn(pv, pvl)}${btn(fast, ztOn ? '⚡ Sofort' : '⚡ Schnell')}</div>${gear}</div>` + (this._wbNOpen && n.num ? `<div class="wbn"><div class="wbn-h"><b>Netzanteil beim PV-Laden</b><span data-k2="wbnv">${n.share} %</span></div>
         <input type="range" min="0" max="100" step="10" value="${n.share}" data-wbn="${n.num.entity_id}" aria-label="Netzanteil">
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
         <p class="sub" style="margin:6px 0 0">Bei ${n.share || 30} % kommen höchstens ${n.share || 30} % des Ladestroms aus dem Netz, der Rest von der Sonne. Reicht die Sonne nicht einmal für die Mindestleistung (4,2 kW), entscheidet wieder der Home Manager.</p>
         ${n.akkuOk ? `<div class="row" style="margin-top:8px"><div class="txt"><b>Speicher darf Auto mitladen</b><div class="s" style="color:var(--muted);font-size:12px">${n.akkuOk.state === 'on' ? 'Der Anker hilft beim Laden mit' : n.pause && n.pause.state === 'on' ? 'Anker pausiert, solange das Auto lädt' : 'Aus: Der Anker bleibt fürs Haus voll'}</div></div><button class="tg" role="switch" aria-label="Speicher darf Auto mitladen" aria-checked="${n.akkuOk.state === 'on'}" data-wbakku></button></div>` : ''}
-        <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '')
+        <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '') + prHtml + zH + spHtml
       + (locked ? `<p class="sub" style="margin:6px 0 0;color:var(--warn,#c77d18)">Der Drehschalter an der Wallbox steht auf Schnellladen. Stell ihn einmal auf die zweite Stellung, dann kannst du hier umschalten.</p>` : '');
     if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
   }
