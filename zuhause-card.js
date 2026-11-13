@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.46.2';
+const VERSION = '2.46.3';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -2297,8 +2297,7 @@ class ZuhauseCard extends HTMLElement {
     const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
     const S2 = this._hass.states, wpL = S2['light.waermepumpe_pv'], wpK = S2['input_boolean.warmepumpe_pv_gesperrt'];
     const tgRow = (title, sub, on, attr, lbl) => `<div class="row" style="margin-top:10px"><div class="txt"><b>${title}</b><div class="s" style="color:var(--muted);font-size:12px">${sub}</div></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${on}" ${attr}></button></div>`;
-    const hpHtml = wpL ? tgRow('♨️ Wärmepumpe PV-Anhebung', wpL.state === 'on' ? 'Läuft: Die Wärmepumpe nutzt den Sonnenüberschuss' : 'Aus', wpL.state === 'on', 'data-wphp', 'Wärmepumpe PV-Anhebung')
-      + (wpK ? tgRow('🚫 Wärmepumpe sperren', wpK.state === 'on' ? 'Gesperrt: Die PV-Anhebung bleibt aus' : 'Aus: Schaltet bei Überschuss automatisch', wpK.state === 'on', 'data-wplock', 'Wärmepumpe sperren') : '') : '';
+    const hpHtml = wpL && wpK ? tgRow('🚫 Wärmepumpe sperren', wpK.state === 'on' ? 'Gesperrt: Die PV-Anhebung bleibt aus' : wpL.state === 'on' ? 'Läuft mit Sonnenüberschuss' : 'Aus: Schaltet bei Überschuss automatisch', wpK.state === 'on', 'data-wplock', 'Wärmepumpe sperren') : '';
     const zH = this._wbZeit(sel, pv, fast);
     const ztOn = (S0 => S0['input_boolean.zuhause_wallbox_zeit_aktiv'] && S0['input_boolean.zuhause_wallbox_zeit_aktiv'].state === 'on')(this._hass.states);
     const gear = n.num ? `<button class="seg${this._wbNOpen ? ' on' : ''}" data-wbgear aria-label="Netzanteil einstellen" aria-expanded="${!!this._wbNOpen}" style="flex:0 0 46px;padding:0">⚙</button>` : '';
