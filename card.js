@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.45.1';
+const VERSION = '2.46.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -188,6 +188,8 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 /* energy */
 .stage{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#9faabb,#adb2be);padding:74px 0 104px;margin-bottom:2px}
 .hbox{position:relative;max-width:620px;margin:0 auto}.hbox img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);mask-composite:intersect}
+.hbox img.wp{position:absolute;left:3%;top:76%;width:16%;height:auto;-webkit-mask-image:none;mask-image:none;filter:drop-shadow(0 4px 6px rgba(30,40,60,.35))}
+.wpchip{position:absolute;left:2%;top:67.5%;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.92);color:#333;box-shadow:0 1px 4px rgba(30,40,60,.25);white-space:nowrap}.wpchip.on{background:var(--sun);color:#3a2a00}.wpchip.lock{background:#c0392b;color:#fff}
 .lab{position:absolute;color:#fff;text-shadow:0 1px 3px rgba(30,40,60,.35);white-space:nowrap}
 .lab.up{bottom:calc(100% + 6px)}.lab.dn{top:calc(100% + 6px)}.lab[data-more]{cursor:pointer}
 .lab .t{font-size:13px;opacity:.92}.lab .v{font-family:var(--display);font-size:22px;font-weight:700;line-height:1.15}
@@ -556,9 +558,11 @@ class ZuhauseCard extends HTMLElement {
             <path class="cab" d="M458 614L458 585L657 572"/>
             ${[['fpv', 'M846 140L909 226L915 240L916 534L803 551', 'var(--sun)'], ['fbk', 'M215 421L255 437L401 428L404 433L404 512L396 521L396 618', 'var(--sun)'],
               ['fbat', 'M627 708L667 704L669 584L684 566L747 562', 'var(--batt)'], ['fgrid', 'M948 777L768 690L766 600', 'var(--grid)'],
-              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)']].map(([k, d, col]) =>
+              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)'], ['fwp', 'M396 618L352 664L238 692', 'var(--sun)']].map(([k, d, col]) =>
               `<g data-k="${k}" class="idle">${[['t1', -1.494], ['t2', -1.674], ['t3', 0]].map(([c, dl]) => `<path class="p ${c}" d="${d}" pathLength="100" style="--d:${dl}s"/>`).join('')}</g>`).join('')}
           </svg>
+          <img class="wp" data-k="wp" src="${IMG}waermepumpe.webp" alt="Wärmepumpe" hidden>
+          <div class="wpchip" data-k="wpchip" hidden></div>
           <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
           <div class="lab up" style="left:64%"><div class="t"><span class="dot" style="background:#fff"></span>Haus</div><div class="v num"><span data-k="vhouse">–</span><small data-k="uhouse">kW</small></div><div class="s" data-k="shouse"></div></div>
           <div class="lab dn" style="left:3%"><div class="t"><span class="dot" data-k="dbk" style="background:var(--sun)"></span>Marstek</div><div class="v num"><span data-k="vbk">–</span><small data-k="ubk">W</small></div><div class="s" data-k="sbk"></div><div class="s" data-k="sbk3"></div><div class="s" data-k="sbk2"></div></div>
@@ -2489,6 +2493,19 @@ class ZuhauseCard extends HTMLElement {
     k.dbat.classList.toggle('idle', Math.abs(aP) < 0.02);
     this._flow('fbat', Math.abs(aP) > 0.02, aP > 0); // lädt: vom Haus in den Speicher
     this._flow('fgrid', Math.abs(grid) > 0.02, grid < 0); // Einspeisung: vom Haus ins Netz
+    // Wärmepumpe (Wolf): Außengerät neben dem Haus; PV-Anhebung an = Sonne fließt in die Wärmepumpe
+    {
+      const S = this._hass.states, hpId = c.heatpump || Object.keys(S).find(id => id.startsWith('light.') && /w(ä|ae|a)rmepumpe/i.test(id) && /pv/i.test(id));
+      const hp = hpId && S[hpId], lkId = c.heatpump_lock || 'input_boolean.warmepumpe_pv_gesperrt', lk = S[lkId];
+      if (k.wp) k.wp.hidden = !hp;
+      if (k.wpchip) {
+        k.wpchip.hidden = !hp;
+        const locked = !!lk && lk.state === 'on', on = !!hp && hp.state === 'on';
+        k.wpchip.className = 'wpchip' + (locked ? ' lock' : on ? ' on' : '');
+        this._set('wpchip', locked ? '🔒 gesperrt' : on ? '☀ PV-Anhebung' : 'Wärmepumpe');
+      }
+      this._flow('fwp', !!hp && hp.state === 'on' && !(lk && lk.state === 'on'));
+    }
 
     // Batterien
     const socs = [];
