@@ -12,6 +12,14 @@ Regeln für alle Aufträge:
 
 ---
 
+## A17 · 2026-11-13 · Trockner und Waschmaschine: alle Entitäten mit Werten melden · Status: offen
+
+Auf der Haushalt-Seite der Karte zeigen Trockner und Waschmaschine kaum Werte (Waschmaschine nur „Bereit“, Trockner „towels · Läuft“ und rechts eine „0“). Ich brauche die genauen Entitäten und aktuellen Werte, um die Kachel richtig zu verdrahten. Ändere nichts, nur lesen und melden.
+1. Liste für **Trockner** (Bereich Waschküche, ConnectLife oder Home Connect) und **Waschmaschine** (Home Connect) jede Entität, die zum jeweiligen Gerät gehört, in dieser Form, eine pro Zeile: `entity_id | Name | aktueller Zustand | Einheit | device_class`. Auch deaktivierte oder ausgeblendete nennen und kennzeichnen.
+2. Sage mir, welche Integration (ConnectLife, Home Connect, beides?) den Trockner liefert, und ob es dort zwei Geräte „Trockner“ gibt (zum Beispiel doppelte Einträge).
+3. Nenne mir, welche Entität den Betriebsstatus des Trockners trägt (Zustand `run`, `ready`, `finished` oder ähnlich), welche die Restzeit, und welche das gewählte Programm.
+4. Gib mir die Liste direkt in deiner Antwort aus, damit Christof sie hier einfügen kann.
+
 ## A16 · 2026-11-10 · Meldung „Sensoren werden abgerufen“ auf Handy und Uhr abstellen · Status: offen
 
 Christof bekam gegen 07:00 auf dem Handy und der Uhr eine Meldung „Sensoren werden abgerufen“ und will sie nicht sehen. Die Dashboard-Karte sendet so etwas nicht, es kommt aus Home Assistant selbst.
