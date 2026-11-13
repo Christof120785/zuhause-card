@@ -12,6 +12,14 @@ Regeln für alle Aufträge:
 
 ---
 
+## A18 · 2026-11-13 · Marstek B2500: Warum entlädt er, und was lässt sich einstellen? · Status: offen
+
+Christof sieht in der Karte beim Marstek „532 W, entlädt 266 W, Akku 41 %“. Er will wissen, warum der Marstek entlädt, obwohl er nur zu 41 % voll ist, und er will umschalten können, ob die Marstek-Speicher erst voll laden und dann entladen, oder laden und entladen gleichzeitig. Nur lesen und herausfinden, nichts ändern.
+1. Liste alle Entitäten des Marstek (Name, entity_id, aktueller Wert, Einheit, ob Schalter/Auswahl/Zahl). Nenne die Integration, über die er in Home Assistant läuft (zum Beispiel MQTT/Hame, HACS, Cloud).
+2. Welche davon steuert, wann der Marstek entlädt? Suche nach Ausgangsleistung/Ausgabemodus (Output), „Entladen bei Sonne“, Ladegrenze, Entladegrenze/Mindest-SoC, Zeitplänen (Zeitschaltungen im Marstek), Betriebsmodus (zum Beispiel Eigenverbrauch/Netz-Nulleinspeisung) und Priorität (Batterie zuerst laden oder gleichzeitig). Gibt es etwas, womit man „erst volladen, dann entladen“ einstellen kann? Sage mir genau, welche Entität das ist und welche Werte sie hat.
+3. Prüfe, ob eine Home-Assistant-Automation (zum Beispiel unsere Anker-Schutzregeln) den Marstek schaltet, oder ob die Entladung die Eigenlogik des Geräts ist (der B2500 reicht Solarleistung durch und ergänzt aus dem Akku, um die eingestellte Ausgangsleistung zu erreichen). Sage mir, was zutrifft.
+4. Gib mir in deiner Antwort die Liste und das Ergebnis aus, damit Christof es hier einfügen kann.
+
 ## A17 · 2026-11-13 · Trockner und Waschmaschine: alle Entitäten mit Werten melden · Status: erledigt
 
 Auf der Haushalt-Seite der Karte zeigen Trockner und Waschmaschine kaum Werte (Waschmaschine nur „Bereit“, Trockner „towels · Läuft“ und rechts eine „0“). Ich brauche die genauen Entitäten und aktuellen Werte, um die Kachel richtig zu verdrahten. Ändere nichts, nur lesen und melden.
