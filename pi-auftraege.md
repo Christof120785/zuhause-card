@@ -12,6 +12,17 @@ Regeln für alle Aufträge:
 
 ---
 
+## A19 · 2026-11-13 · Speicher-Karten als Datei für die Karte bereitstellen · Status: offen
+
+Die Home-Assistant-Ansicht mit den Speicher-Auswertungen (Spalten „Übersicht“ mit Erspart/Bezahlt und „Zähler und Preise“, „Anker Solix“ mit Geladen pro Tag, Entladen pro Tag, Ladekurve, Entladekurve, und „Marstek B2500“ mit Geladen pro Tag, Entladen pro Tag, Ladekurve (Module) usw.) soll direkt im Reiter Energie der Dashboard-Karte stehen, unter „Erzeugung und Verbrauch“. Die Karte lädt dafür eine Datei und zeigt die darin stehenden Home-Assistant-Karten selbst an (ab Version 2.48.0).
+1. Lies die Konfiguration genau dieser Ansicht aus (Dashboard, Ansicht, Karten mit ihren Einstellungen). Übernimm jede Karte so, wie sie dort ist (Typ, Entitäten, Zeiträume, Namen), ohne etwas wegzulassen oder umzubauen.
+2. Schreibe sie als JSON nach `/config/www/speicher-karten.json` (in Home Assistant erreichbar unter `/local/speicher-karten.json`) in genau diesem Aufbau, eine Spalte pro Abschnitt in der gleichen Reihenfolge wie jetzt:
+   `{"columns": [ {"title": "Übersicht", "cards": [ <Karte>, <Karte> ]}, {"title": "Anker Solix", "cards": [ ... ]}, {"title": "Marstek B2500", "cards": [ ... ]} ]}`
+   Jede `<Karte>` ist die unveränderte Karten-Konfiguration als JSON (das, was in YAML unter `type: ...` steht). Enthält die Ansicht Stapel (`vertical-stack`, `grid`), lass sie als eine Karte stehen oder löse sie in ihre Karten auf.
+3. Sicherung: Lege vorher eine Kopie der Dashboard-Konfiguration an und nenne mir den Ort. Die bisherige Ansicht (der Extra-Reiter neben Energie) bleibt **zunächst unverändert stehen**; Christof sagt dir später, wann sie weg darf.
+4. Keine Passwörter, Schlüssel oder Adressen in die Datei. Prüfe, dass `https://…/local/speicher-karten.json` aus Home Assistant heraus erreichbar ist (HTTP 200).
+5. Sage mir in zwei Sätzen, was du geschrieben hast und wie viele Karten pro Spalte.
+
 ## A18 · 2026-11-13 · Marstek B2500: Warum entlädt er, und was lässt sich einstellen? · Status: offen
 
 Christof sieht in der Karte beim Marstek „532 W, entlädt 266 W, Akku 41 %“. Er will wissen, warum der Marstek entlädt, obwohl er nur zu 41 % voll ist, und er will umschalten können, ob die Marstek-Speicher erst voll laden und dann entladen, oder laden und entladen gleichzeitig. Nur lesen und herausfinden, nichts ändern.
