@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.47.0';
+const VERSION = '2.48.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -39,7 +39,7 @@ if (!window.__zuhauseUpd) {
 // Kacheln unter der Begrüßung: Name, Breite am großen Bildschirm (von 12), Breite am Tablet (von 2)
 const TILES = {
   energy: ['Energie & Wallbox', 8, 1], cams: ['Kameras', 4, 1], home: ['Räume', 8, 2], waste: ['Müllabfuhr', 4, 1],
-  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1], app: ['Haushaltsgeräte', 4, 1], prn: ['3D-Drucker', 4, 1]
+  wx: ['Wetter', 8, 1], hist: ['Energiebilanz', 12, 2], sec: ['Sicherheit', 4, 1], vac: ['Saugroboter', 4, 1], app: ['Haushaltsgeräte', 4, 1], prn: ['3D-Drucker', 4, 1], stor: ['Speicher', 12, 2]
 };
 
 // Blätter (Tabs) unter der Begrüßung: Schlüssel, Name, enthaltene Kacheln (null = alle)
@@ -52,7 +52,7 @@ const PG_ICO = {
   alles: 'M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z'
 };
 const PAGES = [['start', 'Start', ['energy', 'wx', 'waste']], ['raeume', 'Räume', ['home']], ['kameras', 'Kameras', ['cams', 'sec']],
-  ['geraete', 'Haushalt', ['app', 'vac', 'prn']], ['energie', 'Energie', ['hist']], ['alles', 'Alles', null]];
+  ['geraete', 'Haushalt', ['app', 'vac', 'prn']], ['energie', 'Energie', ['hist', 'stor']], ['alles', 'Alles', null]];
 
 // Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
 const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /^wohnzimmer( gro(ß|ss))?$/i], ['Küche', /k(ü|ue|u)che/i],
@@ -172,6 +172,7 @@ const CSS = `
 .eyebrow span:last-child{letter-spacing:.02em;text-transform:none;color:var(--muted)}
 h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .sub{font-size:12px;color:var(--muted);margin:0 0 10px}
+.storg{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}.storg .sc{display:flex;flex-direction:column;gap:12px;min-width:0}.storg .sh{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:2px 2px 0}
 .num{font-variant-numeric:tabular-nums}
 .pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--sun-soft);color:var(--sun);white-space:nowrap}
 .pill.off{background:var(--tile);color:var(--muted)}
@@ -652,6 +653,11 @@ class ZuhauseCard extends HTMLElement {
         <div data-k="hist"></div><div class="htip" data-k="htip"></div>
         <div class="legend" data-k="hleg"></div>
         <div class="etot" data-k="etot"></div>
+      </section>
+
+      <section class="card stor" data-sec="stor">
+        <div class="eyebrow"><span>Speicher</span><span>Anker · Marstek</span></div>
+        <div class="storg" data-k="stor"></div>
       </section>
     </div></div>`;
 
@@ -1457,6 +1463,36 @@ class ZuhauseCard extends HTMLElement {
     if (k.app.dataset.v !== out) { k.app.dataset.v = out; k.app.innerHTML = out; }
   }
   // 3D-Drucker: Verbrauch aus der Messsteckdose (Leistung, kWh heute und im Monat); Einträge werden am Namen gefunden
+  // Speicher: zeigt die Home-Assistant-Karten aus /config/www/speicher-karten.json (Spalten mit Karten) direkt in der Karte
+  _renderStor() {
+    const k = this._k; if (!k.stor) return;
+    const pg = this._page(); if (pg !== 'energie' && pg !== 'alles') return;
+    const S = this._stor || (this._stor = { cols: null, state: 'load' });
+    if (S.state === 'load' && !S.busy) {
+      S.busy = true;
+      (async () => {
+        try {
+          const r = await fetch('/local/speicher-karten.json?v=' + Date.now(), { cache: 'no-store' });
+          if (!r.ok) throw new Error('keine Datei');
+          const cfg = await r.json(), cols = Array.isArray(cfg) ? cfg : cfg.columns;
+          const helpers = await window.loadCardHelpers();
+          k.stor.innerHTML = '';
+          S.cols = [];
+          for (const col of cols) {
+            const d = document.createElement('div'); d.className = 'sc';
+            if (col.title) { const t = document.createElement('div'); t.className = 'sh'; t.textContent = col.title; d.appendChild(t); }
+            for (const cc of (col.cards || [])) {
+              try { const el = await helpers.createCardElement(cc); S.cols.push(el); d.appendChild(el); } catch (e) { console.warn('zuhause-card: Speicherkarte', e); }
+            }
+            k.stor.appendChild(d);
+          }
+          S.state = 'ok';
+        } catch (e) { S.state = 'none'; k.stor.innerHTML = '<p class="sub">Wird angezeigt, sobald die Speicher-Karten in Home Assistant angelegt sind.</p>'; }
+        S.busy = false;
+      })();
+    }
+    if (S.state === 'ok' && Date.now() - (S.t || 0) > 4000) { S.t = Date.now(); S.cols.forEach(el => { try { el.hass = this._hass; } catch (e) {} }); }
+  }
   _renderPrn() {
     const k = this._k; if (!k.prn) return;
     const all = Object.values(this._hass.states).filter(x => x.entity_id.startsWith('sensor.') && /drucker|printer/i.test(x.entity_id + ' ' + (x.attributes.friendly_name || '')));
@@ -2465,6 +2501,7 @@ class ZuhauseCard extends HTMLElement {
     this._renderVac();
     this._renderApp();
     this._renderPrn();
+    this._renderStor();
     // Begrüßung mit dem Namen des angemeldeten Benutzers
     this._set('uname', (this._hass.user && this._hass.user.name) || c.name);
 
