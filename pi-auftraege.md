@@ -12,7 +12,7 @@ Regeln für alle Aufträge:
 
 ---
 
-## A19 · 2026-11-13 · Speicher-Karten als Datei für die Karte bereitstellen · Status: offen
+## A19 · 2026-11-13 · Speicher-Karten als Datei für die Karte bereitstellen · Status: erledigt
 
 Die Home-Assistant-Ansicht mit den Speicher-Auswertungen (Spalten „Übersicht“ mit Erspart/Bezahlt und „Zähler und Preise“, „Anker Solix“ mit Geladen pro Tag, Entladen pro Tag, Ladekurve, Entladekurve, und „Marstek B2500“ mit Geladen pro Tag, Entladen pro Tag, Ladekurve (Module) usw.) soll direkt im Reiter Energie der Dashboard-Karte stehen, unter „Erzeugung und Verbrauch“. Die Karte lädt dafür eine Datei und zeigt die darin stehenden Home-Assistant-Karten selbst an (ab Version 2.48.0).
 1. Lies die Konfiguration genau dieser Ansicht aus (Dashboard, Ansicht, Karten mit ihren Einstellungen). Übernimm jede Karte so, wie sie dort ist (Typ, Entitäten, Zeiträume, Namen), ohne etwas wegzulassen oder umzubauen.
@@ -23,7 +23,7 @@ Die Home-Assistant-Ansicht mit den Speicher-Auswertungen (Spalten „Übersicht�
 4. Keine Passwörter, Schlüssel oder Adressen in die Datei. Prüfe, dass `https://…/local/speicher-karten.json` aus Home Assistant heraus erreichbar ist (HTTP 200).
 5. Sage mir in zwei Sätzen, was du geschrieben hast und wie viele Karten pro Spalte.
 
-## A18 · 2026-11-13 · Marstek B2500: Warum entlädt er, und was lässt sich einstellen? · Status: offen
+## A18 · 2026-11-13 · Marstek B2500: Warum entlädt er, und was lässt sich einstellen? · Status: erledigt
 
 Christof sieht in der Karte beim Marstek „532 W, entlädt 266 W, Akku 41 %“. Er will wissen, warum der Marstek entlädt, obwohl er nur zu 41 % voll ist, und er will umschalten können, ob die Marstek-Speicher erst voll laden und dann entladen, oder laden und entladen gleichzeitig. Nur lesen und herausfinden, nichts ändern.
 1. Liste alle Entitäten des Marstek (Name, entity_id, aktueller Wert, Einheit, ob Schalter/Auswahl/Zahl). Nenne die Integration, über die er in Home Assistant läuft (zum Beispiel MQTT/Hame, HACS, Cloud).
