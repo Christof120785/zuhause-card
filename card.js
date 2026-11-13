@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.46.4';
+const VERSION = '2.47.0';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -730,6 +730,8 @@ class ZuhauseCard extends HTMLElement {
       if (wz) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_zeit_' + (wz.dataset.wbz === 'ende' ? 'ende_aktiv' : 'aktiv') }); return; }
       const wt = e.target.closest('[data-wbtag]');
       if (wt) { const st = this._hass.states['input_text.zuhause_wallbox_zeit_tage']; const cur = new Set(String(st ? st.state : '0123456').split('').filter(c => /[0-6]/.test(c))); const d = wt.dataset.wbtag; cur.has(d) ? cur.delete(d) : cur.add(d); if (cur.size) this._hass.callService('input_text', 'set_value', { entity_id: 'input_text.zuhause_wallbox_zeit_tage', value: [...cur].sort().join('') }); return; }
+      const mmb = e.target.closest('[data-mmode]');
+      if (mmb) { Object.values(this._hass.states).filter(x => x.entity_id.startsWith('select.') && /marstek/i.test(x.entity_id) && /charging_mode/i.test(x.entity_id)).forEach(x => { const o = (x.attributes.options || []).find(t => mmb.dataset.mmode === 'full' ? /fully|erst/i.test(t) : /simult/i.test(t)); if (o) this._hass.callService('select', 'select_option', { entity_id: x.entity_id, option: o }); }); return; }
       if (e.target.closest('[data-wphp]')) { const l = this._hass.states['light.waermepumpe_pv']; this._hass.callService('light', l && l.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: 'light.waermepumpe_pv' }); return; }
       if (e.target.closest('[data-wplock]')) { const l = this._hass.states['input_boolean.warmepumpe_pv_gesperrt']; this._hass.callService('input_boolean', l && l.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: 'input_boolean.warmepumpe_pv_gesperrt' }); return; }
       if (e.target.closest('[data-wbsperre]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_anker_entladen_sperren' }); return; }
@@ -2285,6 +2287,12 @@ class ZuhauseCard extends HTMLElement {
     const S2 = this._hass.states, wpL = S2['light.waermepumpe_pv'], wpK = S2['input_boolean.warmepumpe_pv_gesperrt'];
     const tgRow = (title, sub, on, attr, lbl) => `<div class="row" style="margin-top:10px"><div class="txt"><b>${title}</b><div class="s" style="color:var(--muted);font-size:12px">${sub}</div></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${on}" ${attr}></button></div>`;
     const hpHtml = wpL && wpK ? tgRow('🚫 Wärmepumpe sperren', wpK.state === 'on' ? 'Gesperrt: Die PV-Anhebung bleibt aus' : wpL.state === 'on' ? 'Läuft mit Sonnenüberschuss' : 'Aus: Schaltet bei Überschuss automatisch', wpK.state === 'on', 'data-wplock', 'Wärmepumpe sperren') : '';
+    // Marstek B2500: pro Akku ein Auswahlfeld "Charging Mode"; hier beide gemeinsam umschalten
+    const mmS = Object.values(S2).filter(x => x.entity_id.startsWith('select.') && /marstek/i.test(x.entity_id) && /charging_mode/i.test(x.entity_id) && Array.isArray(x.attributes.options));
+    const mmSim = x => /simult/i.test(x), mmFull = x => /fully|erst/i.test(x);
+    const mmCur = mmS.map(x => mmFull(x.state) ? 'full' : mmSim(x.state) ? 'simul' : '?');
+    const mmV = mmS.length && mmCur.every(v => v === mmCur[0]) ? mmCur[0] : (mmS.length ? 'mix' : '');
+    const mmHtml = mmS.length ? `<div class="row" style="margin-top:10px;flex-wrap:wrap"><div class="txt"><b>🔋 Marstek-Speicher</b><div class="s" style="color:var(--muted);font-size:12px">${mmV === 'simul' ? 'Laden und Entladen gleichzeitig' : mmV === 'full' ? 'Erst voll laden, dann entladen' : mmV === 'mix' ? 'Die Akkus sind unterschiedlich eingestellt' : 'unbekannt'}</div></div></div><div class="segs" style="margin-top:6px"><button class="seg${mmV === 'simul' ? ' on' : ''}" data-mmode="simul">Gleichzeitig</button><button class="seg${mmV === 'full' ? ' on' : ''}" data-mmode="full">Erst voll laden</button></div>` : '';
     const zH = this._wbZeit(sel, pv, fast);
     const ztOn = (S0 => S0['input_boolean.zuhause_wallbox_zeit_aktiv'] && S0['input_boolean.zuhause_wallbox_zeit_aktiv'].state === 'on')(this._hass.states);
     const gear = n.num ? `<button class="seg${this._wbNOpen ? ' on' : ''}" data-wbgear aria-label="Netzanteil einstellen" aria-expanded="${!!this._wbNOpen}" style="flex:0 0 46px;padding:0">⚙</button>` : '';
@@ -2293,7 +2301,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
         <p class="sub" style="margin:6px 0 0">Bei ${n.share || 30} % kommen höchstens ${n.share || 30} % des Ladestroms aus dem Netz, der Rest von der Sonne. Reicht die Sonne nicht einmal für die Mindestleistung (4,2 kW), entscheidet wieder der Home Manager.</p>
         ${n.akkuOk ? `<div class="row" style="margin-top:8px"><div class="txt"><b>Speicher darf Auto mitladen</b><div class="s" style="color:var(--muted);font-size:12px">${n.akkuOk.state === 'on' ? 'Der Anker hilft beim Laden mit' : n.pause && n.pause.state === 'on' ? 'Anker pausiert, solange das Auto lädt' : 'Aus: Der Anker bleibt fürs Haus voll'}</div></div><button class="tg" role="switch" aria-label="Speicher darf Auto mitladen" aria-checked="${n.akkuOk.state === 'on'}" data-wbakku></button></div>` : ''}
-        <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '') + prHtml + zH + spHtml + hpHtml
+        <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '') + prHtml + zH + spHtml + hpHtml + mmHtml
       + (locked ? `<p class="sub" style="margin:6px 0 0;color:var(--warn,#c77d18)">Der Drehschalter an der Wallbox steht auf Schnellladen. Stell ihn einmal auf die zweite Stellung, dann kannst du hier umschalten.</p>` : '');
     if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
   }
