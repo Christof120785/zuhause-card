@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.0';
+const VERSION = '2.48.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -172,7 +172,7 @@ const CSS = `
 .eyebrow span:last-child{letter-spacing:.02em;text-transform:none;color:var(--muted)}
 h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .sub{font-size:12px;color:var(--muted);margin:0 0 10px}
-.storg{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}.storg .sc{display:flex;flex-direction:column;gap:12px;min-width:0}.storg .sh{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:2px 2px 0}
+.storg{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px 24px;align-items:start;font-family:var(--ha-font-family-body,Roboto,Noto,sans-serif);font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6);letter-spacing:normal;color:var(--primary-text-color)}.storg .sc{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px;min-width:0;align-content:start}.storg .cd{grid-column:span var(--cs,12);grid-row:span var(--rs,1);min-width:0;position:relative}.storg .cd.fit{height:calc(var(--rs,1) * 64px - 8px)}.storg .cd.full{grid-column:1/-1}.storg .cd>*{display:block;height:100%}.storg .cd:not(.fit)>*{height:auto}.storg .sh{grid-column:1/-1;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:2px 2px 0}
 .num{font-variant-numeric:tabular-nums}
 .pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--sun-soft);color:var(--sun);white-space:nowrap}
 .pill.off{background:var(--tile);color:var(--muted)}
@@ -1476,22 +1476,39 @@ class ZuhauseCard extends HTMLElement {
           if (!r.ok) throw new Error('keine Datei');
           const cfg = await r.json(), cols = Array.isArray(cfg) ? cfg : cfg.columns;
           const helpers = await window.loadCardHelpers();
+          const hass = this._hass, huiCard = !!customElements.get('hui-card');
+          // Karten so bauen wie ein Home-Assistant-Abschnitt: hass vor dem Einhängen setzen
+          // (die Entities-Karte zeichnet sonst nichts) und im 12er-Raster anordnen
+          const place = (w, el, cc) => {
+            let o = {}; try { o = Object.assign({}, (el.getGridOptions && el.getGridOptions()) || {}, cc.grid_options || {}); } catch (e) {}
+            const c = o.columns, r = o.rows;
+            w.classList.toggle('full', c === 'full'); w.classList.toggle('fit', typeof r === 'number');
+            w.style.setProperty('--cs', typeof c === 'number' ? Math.min(12, Math.max(1, c)) : 12);
+            w.style.setProperty('--rs', typeof r === 'number' ? r : 1);
+          };
           k.stor.innerHTML = '';
           S.cols = [];
           for (const col of cols) {
             const d = document.createElement('div'); d.className = 'sc';
             if (col.title) { const t = document.createElement('div'); t.className = 'sh'; t.textContent = col.title; d.appendChild(t); }
             for (const cc of (col.cards || [])) {
-              try { const el = await helpers.createCardElement(cc); S.cols.push(el); d.appendChild(el); } catch (e) { console.warn('zuhause-card: Speicherkarte', e); }
+              try {
+                let el;
+                if (huiCard) { el = document.createElement('hui-card'); el.hass = hass; el.preview = false; el.layout = 'grid'; el.config = cc; el.load(); }
+                else { el = await helpers.createCardElement(cc); el.hass = hass; try { el.layout = 'grid'; } catch (e) {} }
+                const w = document.createElement('div'); w.className = 'cd'; w.appendChild(el); place(w, el, cc);
+                el.addEventListener('card-updated', () => place(w, el, cc));
+                S.cols.push(el); d.appendChild(w);
+              } catch (e) { console.warn('zuhause-card: Speicherkarte', e); }
             }
             k.stor.appendChild(d);
           }
-          S.state = 'ok';
+          S.h = hass; S.state = 'ok';
         } catch (e) { S.state = 'none'; k.stor.innerHTML = '<p class="sub">Wird angezeigt, sobald die Speicher-Karten in Home Assistant angelegt sind.</p>'; }
         S.busy = false;
       })();
     }
-    if (S.state === 'ok' && Date.now() - (S.t || 0) > 4000) { S.t = Date.now(); S.cols.forEach(el => { try { el.hass = this._hass; } catch (e) {} }); }
+    if (S.state === 'ok' && S.h !== this._hass) { S.h = this._hass; S.cols.forEach(el => { try { el.hass = this._hass; } catch (e) {} }); }
   }
   _renderPrn() {
     const k = this._k; if (!k.prn) return;
