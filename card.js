@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.46.0';
+const VERSION = '2.46.1';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -188,8 +188,8 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 /* energy */
 .stage{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#9faabb,#adb2be);padding:74px 0 104px;margin-bottom:2px}
 .hbox{position:relative;max-width:620px;margin:0 auto}.hbox img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);mask-composite:intersect}
-.hbox img.wp{position:absolute;left:3%;top:76%;width:16%;height:auto;-webkit-mask-image:none;mask-image:none;filter:drop-shadow(0 4px 6px rgba(30,40,60,.35))}
-.wpchip{position:absolute;left:2%;top:67.5%;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.92);color:#333;box-shadow:0 1px 4px rgba(30,40,60,.25);white-space:nowrap}.wpchip.on{background:var(--sun);color:#3a2a00}.wpchip.lock{background:#c0392b;color:#fff}
+.hbox img.wp{position:absolute;left:4%;top:80%;width:12%;height:auto;-webkit-mask-image:none;mask-image:none;filter:drop-shadow(0 4px 6px rgba(30,40,60,.35))}
+.wpchip{position:absolute;left:2%;top:73%;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.92);color:#333;box-shadow:0 1px 4px rgba(30,40,60,.25);white-space:nowrap}.wpchip.on{background:var(--sun);color:#3a2a00}.wpchip.lock{background:#c0392b;color:#fff}
 .lab{position:absolute;color:#fff;text-shadow:0 1px 3px rgba(30,40,60,.35);white-space:nowrap}
 .lab.up{bottom:calc(100% + 6px)}.lab.dn{top:calc(100% + 6px)}.lab[data-more]{cursor:pointer}
 .lab .t{font-size:13px;opacity:.92}.lab .v{font-family:var(--display);font-size:22px;font-weight:700;line-height:1.15}
@@ -2499,10 +2499,10 @@ class ZuhauseCard extends HTMLElement {
       const hp = hpId && S[hpId], lkId = c.heatpump_lock || 'input_boolean.warmepumpe_pv_gesperrt', lk = S[lkId];
       if (k.wp) k.wp.hidden = !hp;
       if (k.wpchip) {
-        k.wpchip.hidden = !hp;
+        k.wpchip.hidden = !hp || !(lk && lk.state === 'on') && !(hp && hp.state === 'on');
         const locked = !!lk && lk.state === 'on', on = !!hp && hp.state === 'on';
         k.wpchip.className = 'wpchip' + (locked ? ' lock' : on ? ' on' : '');
-        this._set('wpchip', locked ? '🔒 gesperrt' : on ? '☀ PV-Anhebung' : 'Wärmepumpe');
+        this._set('wpchip', locked ? '🔒 gesperrt' : on ? '☀ PV-Anhebung' : '');
       }
       this._flow('fwp', !!hp && hp.state === 'on' && !(lk && lk.state === 'on'));
     }
