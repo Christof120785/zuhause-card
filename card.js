@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.1';
+const VERSION = '2.48.2';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -556,7 +556,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
           <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
-            <path class="cab" d="M458 614L458 585L657 572"/>
+            <path class="cab" d="M458 614L458 585L657 572"/><path class="cab" data-k="wpcab" d="M396 618L352 664L238 692" style="display:none"/>
             ${[['fpv', 'M846 140L909 226L915 240L916 534L803 551', 'var(--sun)'], ['fbk', 'M215 421L255 437L401 428L404 433L404 512L396 521L396 618', 'var(--sun)'],
               ['fbat', 'M627 708L667 704L669 584L684 566L747 562', 'var(--batt)'], ['fgrid', 'M948 777L768 690L766 600', 'var(--grid)'],
               ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)'], ['fwp', 'M396 618L352 664L238 692', 'var(--sun)']].map(([k, d, col]) =>
@@ -566,7 +566,7 @@ class ZuhauseCard extends HTMLElement {
           <div class="wpchip" data-k="wpchip" hidden></div>
           <div class="lab up" style="left:21%" data-more="${c.pv}"><div class="t"><span class="dot" data-k="dpv" style="background:var(--sun)"></span>Solar</div><div class="v num"><span data-k="vpv">–</span><small data-k="upv">kW</small></div><div class="s">heute <span class="num" data-k="today">–</span></div></div>
           <div class="lab up" style="left:64%"><div class="t"><span class="dot" style="background:#fff"></span>Haus</div><div class="v num"><span data-k="vhouse">–</span><small data-k="uhouse">kW</small></div><div class="s" data-k="shouse"></div></div>
-          <div class="lab dn" style="left:3%"><div class="t"><span class="dot" data-k="dbk" style="background:var(--sun)"></span>Marstek</div><div class="v num"><span data-k="vbk">–</span><small data-k="ubk">W</small></div><div class="s" data-k="sbk"></div><div class="s" data-k="sbk3"></div><div class="s" data-k="sbk2"></div></div>
+          <div class="lab dn" style="left:3%"><div class="t"><span class="dot" data-k="dbk" style="background:var(--sun)"></span>Marstek</div><div class="v num"><span data-k="vbk">–</span><small data-k="ubk">W</small></div><div class="s" data-k="sbk"></div><div class="s" data-k="sbk4"></div><div class="s" data-k="sbk3"></div><div class="s" data-k="sbk2"></div></div>
           <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span></div><div class="s" data-k="sbat"></div></div>
           <div class="lab dn" style="left:66%" data-more="${c.grid_in}"><div class="t"><span class="dot" data-k="dgrid" style="background:var(--grid)"></span>Netz</div><div class="v num"><span data-k="vgrid">–</span><small data-k="ugrid">kW</small></div><div class="s" data-k="sgrid"></div></div>
         </div></div>
@@ -2533,6 +2533,9 @@ class ZuhauseCard extends HTMLElement {
     // wie beim Anker-Speicher: lädt / entlädt / Ruhe (Akku-Leistung = Modul-Eingang minus Ausgang)
     const mBat = mb ? this._batP(mb) : null, mW = v => `${Math.round(Math.abs(v) * 1000)} W`;
     this._set('sbk', mSoc === null ? (mb ? 'noch nicht verbunden' : '') : mBat === null ? '' : mBat > 0.01 ? `↓ lädt ${mW(mBat)}` : mBat < -0.01 ? `↑ entlädt ${mW(mBat)}` : 'Ruhe');
+    // Gleichzeitig laden und abgeben: zusätzlich zeigen, was die Marsteks gerade ans Haus geben
+    const mOut = this._marstek().reduce((a, d) => a + (this._kw(d.out) || 0), 0);
+    this._set('sbk4', mSoc !== null && mBat !== null && mBat > 0.01 && mOut > 0.005 ? `↑ ans Haus ${mW(mOut)}` : '');
     this._set('sbk3', mSoc === null ? '' : `Akku ${mSocs.join(' · ')} %`);
     // die einzelnen Module (je Marstek zwei Eingänge)
     const mods = mb ? this._marstek().flatMap(d => [d.i1, d.i2]).filter(Boolean).map(id => this._n(id)).filter(v => v !== null) : [];
@@ -2540,7 +2543,6 @@ class ZuhauseCard extends HTMLElement {
     k.dbk.classList.toggle('idle', !(mIn > 0.005));
     this._flow('fbk', mIn > 0.005);
     // Marstek gibt ab: Leitung von den Marsteks zum Verteiler (im Bild fehlte das Kabel, deshalb als .cab gezeichnet)
-    const mOut = this._marstek().reduce((a, d) => a + (this._kw(d.out) || 0), 0);
     this._flow('fmk', mOut > 0.005);
     this._renderFav();
     pw('house', house + wb);
@@ -2569,6 +2571,7 @@ class ZuhauseCard extends HTMLElement {
       const S = this._hass.states, hpId = c.heatpump || Object.keys(S).find(id => id.startsWith('light.') && /w(ä|ae|a)rmepumpe/i.test(id) && /pv/i.test(id));
       const hp = hpId && S[hpId], lkId = c.heatpump_lock || 'input_boolean.warmepumpe_pv_gesperrt', lk = S[lkId];
       if (k.wp) k.wp.hidden = !hp;
+      if (k.wpcab) k.wpcab.style.display = hp ? '' : 'none'; // Kabel zur Wärmepumpe immer zeigen, Fluss nur bei PV-Anhebung
       if (k.wpchip) {
         k.wpchip.hidden = !hp || !(lk && lk.state === 'on') && !(hp && hp.state === 'on');
         const locked = !!lk && lk.state === 'on', on = !!hp && hp.state === 'on';
