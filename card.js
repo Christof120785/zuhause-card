@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.9';
+const VERSION = '2.48.10';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -453,7 +453,7 @@ class ZuhauseCard extends HTMLElement {
     if (!this._wasteT || Date.now() - this._wasteT > 30 * 60 * 1000) { this._wasteT = Date.now(); this._loadWaste(); }
     if (!this._histT || Date.now() - this._histT > 15 * 60 * 1000) { this._histT = Date.now(); this._loadHistory(); }
     if (!this._ccuT || Date.now() - this._ccuT > 60 * 1000) this._refreshCcu();
-    if (!this._visL) { this._visL = true; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this._refreshCcu(); }); }
+    if (!this._visL) { this._visL = true; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(() => this._refreshCcu(), 5000); }); }
   }
 
   // Systemvariablen (z. B. Alarmstatus "Anwesenheit") frisch von der CCU holen: beim Öffnen und danach jede Minute.
@@ -466,7 +466,9 @@ class ZuhauseCard extends HTMLElement {
     if (!this._hmEntry) {
       try { const es = await h.callWS({ type: 'config_entries/get', domain: 'homematicip_local' }); this._hmEntry = es && es[0] && es[0].entry_id; } catch (e) { /* kein Zugriff */ }
     }
-    if (this._hmEntry) h.callService('homematicip_local', 'fetch_system_variables', { entry_id: this._hmEntry }).catch(() => {});
+    // direkt über die Verbindung senden: Fehler (z. B. kurz nach dem Aufwachen) erscheinen dann nicht als Meldung in der App
+    const c = h.connection; if (!this._hmEntry || !c || c.connected === false) return;
+    c.sendMessagePromise({ type: 'call_service', domain: 'homematicip_local', service: 'fetch_system_variables', service_data: { entry_id: this._hmEntry } }).catch(() => {});
   }
 
   _s(id) { return id && this._hass.states[id]; }
