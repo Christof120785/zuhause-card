@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.4';
+const VERSION = '2.48.5';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -62,7 +62,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 5;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 6;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -2212,14 +2212,15 @@ class ZuhauseCard extends HTMLElement {
       // Akku-Entladung zählt nicht als Sonne: sonst leert das Auto den Hausakku
       const dis = this._ankerEnt(/entladeleistung|discharg\w* power/i);
       const akku = [dis ? w(dis.entity_id) : '', ...this._marstek().filter(d => d.in && d.out).map(d => `([${w(d.out)} - ${w(d.in)}, 0] | max)`)].filter(Boolean);
+      const freiT = `${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)}${akku.length ? ` - (0 if is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on') else (${akku.join(' + ')}))` : ''}`;
       await h.callApi('POST', 'config/automation/config/' + id, {
-        id, alias: 'Zuhause: Wallbox PV-Laden mit Netzanteil', description: 'Angelegt vom Zuhause-Dashboard. Regelt die Leistungsbegrenzung der Wallbox: Sonnenüberschuss plus eingestellter Netzanteil.', mode: 'single',
+        id, alias: 'Zuhause: Wallbox PV-Laden mit Netzanteil', max_exceeded: 'silent', description: 'Angelegt vom Zuhause-Dashboard. Regelt die Leistungsbegrenzung der Wallbox: Sonnenüberschuss plus eingestellter Netzanteil. Fällt der Überschuss unter die Mindestleistung, lädt sie erst 3 Minuten mit Mindestleistung weiter und hört nur auf, wenn er die ganze Zeit zu klein bleibt (kurze Wolken oder ein Gerät, das kurz viel zieht, unterbrechen das Laden nicht mehr).', mode: 'single',
         triggers: [{ trigger: 'time_pattern', seconds: '/30' }, { trigger: 'state', entity_id: ['input_number.zuhause_wallbox_netzanteil', 'input_boolean.zuhause_wallbox_pv_regelung'] }],
         variables: {
           share: "{{ states('input_number.zuhause_wallbox_netzanteil') | float(0) }}",
           aktiv: "{{ is_state('input_boolean.zuhause_wallbox_pv_regelung', 'on') and states('input_number.zuhause_wallbox_netzanteil') | float(0) > 0 }}",
           verbunden: st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or ('not connected' in s or 'not_connected' in s) or 'getrennt' in s) }}` : '{{ true }}',
-          frei: `{{ ${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)}${akku.length ? ` - (0 if is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on') else (${akku.join(' + ')}))` : ''} }}`,
+          frei: `{{ ${freiT} }}`,
           ziel: `{{ ${WB_MAX} if share >= 100 else (frei / (1 - share / 100)) | int }}`,
           neu: `{{ [[(ziel / 100) | round(0) * 100, ${WB_MIN}] | max, ${WB_MAX}] | min | int }}`,
           jetzt: `{{ states('${lim}') | float(${WB_MAX}) }}`,
@@ -2235,7 +2236,12 @@ class ZuhauseCard extends HTMLElement {
                 { action: 'number.set_value', target: { entity_id: lim }, data: { value: '{{ neu }}' } },
                 { action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: fast } }] },
             { conditions: [{ condition: 'template', value_template: `{{ modus == '${fast}' and ziel < ${WB_MIN} }}` }],
-              sequence: [{ action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: pv } }, { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MAX } }] },
+              sequence: [
+                // nicht gleich aufhören: erst mit Mindestleistung weiter, und nur wenn es 3 Minuten lang nie wieder reicht, zurück auf PV-Laden
+                { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MIN } },
+                { wait_template: `{{ share >= 100 or (${freiT}) / (1 - share / 100) >= ${WB_MIN} or not is_state('input_boolean.zuhause_wallbox_pv_regelung', 'on') }}`, timeout: '00:03:00', continue_on_timeout: true },
+                { condition: 'template', value_template: '{{ not wait.completed }}' },
+                { action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: pv } }, { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MAX } }] },
             { conditions: [{ condition: 'template', value_template: `{{ modus == '${fast}' and (neu - jetzt) | abs >= 300 }}` }],
               sequence: [{ action: 'number.set_value', target: { entity_id: lim }, data: { value: '{{ neu }}' } }] },
           ],
