@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.2';
+const VERSION = '2.48.3';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -187,7 +187,7 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 .hero .cf button{background:rgba(255,255,255,.16);color:var(--hero-fg)}.hero .cf .y{background:#c83a3a}
 @media(max-width:520px){.hr{width:100%;justify-content:space-between}.hero .alarm{flex:1;min-width:0}}
 /* energy */
-.stage{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#9faabb,#adb2be);padding:74px 0 104px;margin-bottom:2px}
+.stage{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#9faabb,#adb2be);padding:74px 0 128px;margin-bottom:2px}
 .hbox{position:relative;max-width:620px;margin:0 auto}.hbox img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),linear-gradient(transparent,#000 9%,#000 94%,transparent);mask-composite:intersect}
 .hbox img.wp{position:absolute;left:4%;top:80%;width:12%;height:auto;-webkit-mask-image:none;mask-image:none;filter:drop-shadow(0 4px 6px rgba(30,40,60,.35))}
 .wpchip{position:absolute;left:2%;top:73%;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.92);color:#333;box-shadow:0 1px 4px rgba(30,40,60,.25);white-space:nowrap}.wpchip.on{background:var(--sun);color:#3a2a00}.wpchip.lock{background:#c0392b;color:#fff}
@@ -556,10 +556,10 @@ class ZuhauseCard extends HTMLElement {
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
           <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
-            <path class="cab" d="M458 614L458 585L657 572"/><path class="cab" data-k="wpcab" d="M396 618L352 664L238 692" style="display:none"/>
+            <path class="cab" d="M458 614L458 585L657 572"/><path class="cab" data-k="wpcab" d="M458 585L348 592L348 690L192 690" style="display:none"/>
             ${[['fpv', 'M846 140L909 226L915 240L916 534L803 551', 'var(--sun)'], ['fbk', 'M215 421L255 437L401 428L404 433L404 512L396 521L396 618', 'var(--sun)'],
               ['fbat', 'M627 708L667 704L669 584L684 566L747 562', 'var(--batt)'], ['fgrid', 'M948 777L768 690L766 600', 'var(--grid)'],
-              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)'], ['fwp', 'M396 618L352 664L238 692', 'var(--sun)']].map(([k, d, col]) =>
+              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)'], ['fwp', 'M657 572L458 585L348 592L348 690L192 690', 'var(--sun)']].map(([k, d, col]) =>
               `<g data-k="${k}" class="idle">${[['t1', -1.494], ['t2', -1.674], ['t3', 0]].map(([c, dl]) => `<path class="p ${c}" d="${d}" pathLength="100" style="--d:${dl}s"/>`).join('')}</g>`).join('')}
           </svg>
           <img class="wp" data-k="wp" src="${IMG}waermepumpe.webp" alt="Wärmepumpe" hidden>
