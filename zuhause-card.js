@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.8';
+const VERSION = '2.48.9';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -965,8 +965,10 @@ class ZuhauseCard extends HTMLElement {
         const ca = String(s.attributes.channel_address || s.attributes.address || '');
         const ch = +(ca.split(':')[1] || (id.match(/_ch(\d+)/) || [])[1] || 0);
         if (ch) addFn(n, { kind: 'key', entity_id: id, name: n, attributes: { friendly_name: n }, addr: ca.split(':')[0] || (d.name || '').split(' ').pop(), ch, state: s.state });
-      } else if (/^(binary_sensor|switch|sensor)\./.test(id) && /gesperrt|sperre/i.test(n)) {
-        addFn(n, { kind: 'var', entity_id: id, name: n, attributes: { friendly_name: n }, on: /^(on|true|wahr|ja)$/i.test(s.state), state: s.state });
+      } else if (/^(binary_sensor|switch|sensor)\./.test(id) && /gesperrt|sperre/i.test(n) && !/^P\s/.test(n)) {
+        // CCU-Programme ("P …") weglassen; gibt es einen HA-Helfer gleichen Namens (Ersatz für die CCU), den zeigen
+        const ib = all.find(x => x.entity_id.startsWith('input_boolean.') && nrm(x.attributes.friendly_name || '') === nrm(n)), v = ib || s;
+        addFn(n, { kind: 'var', entity_id: v.entity_id, name: n, attributes: { friendly_name: n }, on: /^(on|true|wahr|ja)$/i.test(v.state), state: v.state });
       }
     });
     // Bereiche zusammenlegen: selbst gewählt (Anordnen) oder automatisch,
@@ -1872,7 +1874,7 @@ class ZuhauseCard extends HTMLElement {
   async _toggleVar(id) {
     const h = this._hass, s = this._s(id); if (!s) return;
     const on = /^(on|true|wahr|ja)$/i.test(s.state);
-    if (id.startsWith('switch.')) { h.callService('switch', on ? 'turn_off' : 'turn_on', { entity_id: id }); return; }
+    if (/^(switch|input_boolean)\./.test(id)) { h.callService(id.split('.')[0], on ? 'turn_off' : 'turn_on', { entity_id: id }); return; }
     if (!this._hmEntry) {
       try { const es = await h.callWS({ type: 'config_entries/get', domain: 'homematicip_local' }); this._hmEntry = es && es[0] && es[0].entry_id; } catch (e) { /* kein Zugriff */ }
     }
