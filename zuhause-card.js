@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.3';
+const VERSION = '2.48.4';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -529,6 +529,21 @@ class ZuhauseCard extends HTMLElement {
       this._hass.callService('light', 'turn_on', { entity_id: mem.map(x => x.entity_id), brightness_step_pct: pct - cur });
     } else this._hass.callService('light', 'turn_on', { entity_id: eid, brightness_pct: pct });
   }
+  // Kabel mit runden Ecken: 'M x y L x y …' → Pfad mit Bögen an jeder Ecke (Radius r, höchstens halbe Strecke)
+  static rd(d, r = 16) {
+    const p = d.match(/-?\d+(\.\d+)?/g).map(Number), pts = [];
+    for (let i = 0; i < p.length; i += 2) pts.push([p[i], p[i + 1]]);
+    if (pts.length < 3) return d;
+    const f = n => Math.round(n * 10) / 10, at = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    let o = `M${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const a = pts[i - 1], c = pts[i], b = pts[i + 1], la = Math.hypot(c[0] - a[0], c[1] - a[1]), lb = Math.hypot(b[0] - c[0], b[1] - c[1]);
+      const ra = Math.min(r, la / 2), rb = Math.min(r, lb / 2), p1 = at(c, a, ra / la), p2 = at(c, b, rb / lb);
+      o += `L${f(p1[0])} ${f(p1[1])}Q${c[0]} ${c[1]} ${f(p2[0])} ${f(p2[1])}`;
+    }
+    const z = pts[pts.length - 1];
+    return o + `L${z[0]} ${z[1]}`;
+  }
   _flow(key, on, rev) {
     const k = this._k; if (!k[key]) return;
     k[key].classList.toggle('idle', !on);
@@ -573,11 +588,11 @@ class ZuhauseCard extends HTMLElement {
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
           <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
-            <path class="cab" d="M458 614L458 585L657 572"/><path class="cab" data-k="wpcab" d="M458 585L348 592L348 690L192 690" style="display:none"/>
+            <path class="cab" d="${ZuhauseCard.rd('M458 614L458 585L657 572')}"/><path class="cab" data-k="wpcab" d="${ZuhauseCard.rd('M458 585L350 592L350 676L192 676')}" style="display:none"/>
             ${[['fpv', 'M846 140L909 226L915 240L916 534L803 551', 'var(--sun)'], ['fbk', 'M215 421L255 437L401 428L404 433L404 512L396 521L396 618', 'var(--sun)'],
               ['fbat', 'M627 708L667 704L669 584L684 566L747 562', 'var(--batt)'], ['fgrid', 'M948 777L768 690L766 600', 'var(--grid)'],
-              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)'], ['fwp', 'M657 572L458 585L348 592L348 690L192 690', 'var(--sun)']].map(([k, d, col]) =>
-              `<g data-k="${k}" class="idle">${[['t1', -1.494], ['t2', -1.674], ['t3', 0]].map(([c, dl]) => `<path class="p ${c}" d="${d}" pathLength="100" style="--d:${dl}s"/>`).join('')}</g>`).join('')}
+              ['fwb', 'M801 552L935 538', 'var(--grid)'], ['fhouse', 'M772 512L772 412L753 406', '#fff'], ['fmk', 'M458 614L458 585L657 572L684 566L747 562', 'var(--sun)'], ['fwp', 'M657 572L458 585L350 592L350 676L192 676', 'var(--sun)']].map(([k, d, col]) =>
+              `<g data-k="${k}" class="idle">${[['t1', -1.494], ['t2', -1.674], ['t3', 0]].map(([c, dl]) => `<path class="p ${c}" d="${ZuhauseCard.rd(d)}" pathLength="100" style="--d:${dl}s"/>`).join('')}</g>`).join('')}
           </svg>
           <img class="wp" data-k="wp" src="${IMG}waermepumpe.webp" alt="Wärmepumpe" hidden>
           <div class="wpchip" data-k="wpchip" hidden></div>
