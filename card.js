@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.5';
+const VERSION = '2.48.6';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -567,7 +567,7 @@ class ZuhauseCard extends HTMLElement {
 
       <section class="card energy" data-sec="energy">
         <div class="eyebrow"><span>Energie &amp; Wallbox</span><span>● Live</span></div>
-        <h2 data-k="eh">Dein Energiefluss</h2><p class="sub"><span data-k="esub"></span> · Autarkie heute <b class="num" data-k="aut">–</b></p>
+        <h2 data-k="eh">Dein Energiefluss</h2><p class="sub"><span data-k="esub"></span></p><p class="sub" style="margin-top:2px">Selbstversorgung <b class="num" data-k="ssv">–</b> <span style="opacity:.7">(heute <span class="num" data-k="aut">–</span>)</span> · Eigenverbrauch <b class="num" data-k="evb">–</b> <span style="opacity:.7">(heute <span class="num" data-k="evbt">–</span>)</span></p>
         <div class="stage"><div class="hbox">
           <img src="${HAUS}" alt="Haus mit Solaranlage, Speicher und Wallbox">
           <svg class="flow" viewBox="0 0 1200 777" preserveAspectRatio="none" aria-hidden="true">
@@ -2574,6 +2574,10 @@ class ZuhauseCard extends HTMLElement {
     const src = [grid > 0.05 && 'Netz', batP < -0.02 && 'Speicher', (pv || 0) > 0.05 && 'Sonnen'].filter(Boolean);
     const srcTxt = src.length ? 'Mit ' + (src.length > 1 ? src.slice(0, -1).map(x => x + '-').join(', ') + ' und ' + src[src.length - 1] : src[0]) + 'strom' : '';
     this._set('eh', wb > 0.05 ? 'Auto lädt' : 'Dein Energiefluss');
+    // wie im SMA-Portal: Selbstversorgung = Anteil des Verbrauchs ohne Netz, Eigenverbrauch = Anteil der Sonne, der im Haus bleibt
+    { const use = house + wb, pc = v => `${Math.round(Math.max(0, Math.min(1, v)) * 100)} %`;
+      this._set('ssv', use > 0.05 ? pc(1 - Math.max(0, grid) / use) : '–');
+      this._set('evb', (pv || 0) > 0.05 ? pc(1 - Math.max(0, -grid) / pv) : '–'); }
     this._set('esub', wb > 0.05 ? (srcTxt || 'Wallbox aktiv')
       : (pv || 0) > 0.05 ? (grid < 0 ? 'Die Sonne liefert mehr, als du brauchst' : 'Die Sonne liefert gerade Energie')
       : 'Gerade kein Sonnenstrom');
@@ -2789,6 +2793,7 @@ class ZuhauseCard extends HTMLElement {
       this._set('today', `${de(pv[t], 1)} kWh`);
       const use = pv[t] + gin[t] - gout[t];
       this._set('aut', use > 0 ? `${Math.round(Math.max(0, Math.min(1, 1 - gin[t] / use)) * 100)} %` : '–');
+      this._set('evbt', pv[t] > 0 ? `${Math.round(Math.max(0, Math.min(1, 1 - gout[t] / pv[t])) * 100)} %` : '–');
       this._wbDay = wb[t]; if (!this._wbSess()) this._set('wbtoday', de(wb[t], 1));
       // Gestern/Heute: Leistung je Viertelstunde in kW (aus 5-Minuten-Statistik)
       const q = new Map();
