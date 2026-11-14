@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.6';
+const VERSION = '2.48.7';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -62,7 +62,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 6;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 7;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -2222,7 +2222,9 @@ class ZuhauseCard extends HTMLElement {
           verbunden: st ? `{% set s = states('${st.entity_id}') | lower %}{{ s not in ['unknown', 'unavailable'] and not (('nicht' in s and 'verbunden' in s) or ('not connected' in s or 'not_connected' in s) or 'getrennt' in s) }}` : '{{ true }}',
           frei: `{{ ${freiT} }}`,
           ziel: `{{ ${WB_MAX} if share >= 100 else (frei / (1 - share / 100)) | int }}`,
-          neu: `{{ [[(ziel / 100) | round(0) * 100, ${WB_MIN}] | max, ${WB_MAX}] | min | int }}`,
+          // Untergrenze: eigene Mindestleistung oder, falls höher, was die Wallbox als kleinsten Wert annimmt (SMA: 4500 W)
+          minw: `{{ [${WB_MIN}, state_attr('${lim}', 'min') | float(0)] | max | int }}`,
+          neu: `{{ [[(ziel / 100) | round(0) * 100, minw] | max, ${WB_MAX}] | min | int }}`,
           jetzt: `{{ states('${lim}') | float(${WB_MAX}) }}`,
           modus: `{{ states('${sel.entity_id}') }}`,
         },
@@ -2238,7 +2240,7 @@ class ZuhauseCard extends HTMLElement {
             { conditions: [{ condition: 'template', value_template: `{{ modus == '${fast}' and ziel < ${WB_MIN} }}` }],
               sequence: [
                 // nicht gleich aufhören: erst mit Mindestleistung weiter, und nur wenn es 3 Minuten lang nie wieder reicht, zurück auf PV-Laden
-                { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MIN } },
+                { action: 'number.set_value', target: { entity_id: lim }, data: { value: '{{ minw }}' } },
                 { wait_template: `{{ share >= 100 or (${freiT}) / (1 - share / 100) >= ${WB_MIN} or not is_state('input_boolean.zuhause_wallbox_pv_regelung', 'on') }}`, timeout: '00:03:00', continue_on_timeout: true },
                 { condition: 'template', value_template: '{{ not wait.completed }}' },
                 { action: 'select.select_option', target: { entity_id: sel.entity_id }, data: { option: pv } }, { action: 'number.set_value', target: { entity_id: lim }, data: { value: WB_MAX } }] },
