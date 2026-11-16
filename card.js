@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.16';
+const VERSION = '2.48.17';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -765,6 +765,7 @@ class ZuhauseCard extends HTMLElement {
       if (e.target.closest('[data-wbsperre]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_anker_entladen_sperren' }); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
+      if (e.target.closest('[data-sbopen]')) { this._sbOpen = !this._sbOpen; this._renderWbMode(); return; }
       if (e.target.closest('[data-wbgear]')) { this._wbNOpen = !this._wbNOpen; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) {
@@ -2379,8 +2380,8 @@ class ZuhauseCard extends HTMLElement {
     // Solar-Boost: Fußbodenheizung mit Sonnenüberschuss vorheizen (Automation pi_solar_boost)
     const sbA = S2['input_boolean.solar_boost_automatisch'], sbU = S2['input_number.solar_boost_nur_unter_temperatur'], sbB = S2['input_number.solar_boost_bis_temperatur'];
     const sbN = (x, lbl) => { if (!x) return ''; const a = x.attributes, v = +x.state; return `<div class="row mn"><div class="txt"><b>${lbl}</b><span>${isNaN(v) ? '–' : de(v, 1) + ' °C'}</span></div><input type="range" class="dim" min="${a.min}" max="${a.max}" step="${a.step || 0.5}" value="${isNaN(v) ? a.min : v}" data-motnum="${x.entity_id}" data-unit="°C" aria-label="${lbl}"></div>`; };
-    const sbHtml = sbA ? `<div class="row" style="margin-top:10px"><div class="txt"><b>☀️🔥 Solar-Boost Heizung</b><div class="s" style="color:var(--muted);font-size:12px">${sbA.state === 'on' ? 'Boostet bei Überschuss automatisch' : 'Aus: nur Boost von Hand'}</div></div><button class="tg" role="switch" aria-label="Solar-Boost" aria-checked="${sbA.state === 'on'}" data-motbool="${sbA.entity_id}"></button></div>`
-      + (sbA.state === 'on' ? sbN(sbU, 'Boosten, wenn Raum unter') + sbN(sbB, 'Boosten bis') : '') : '';
+    const sbHtml = sbA ? `<div class="row" style="margin-top:10px"><div class="txt"><b>☀️🔥 Solar-Boost Heizung</b><div class="s" style="color:var(--muted);font-size:12px">${sbA.state === 'on' ? `Boostet bei Überschuss, unter ${sbU ? de(+sbU.state, 1) : '–'} bis ${sbB ? de(+sbB.state, 1) : '–'} °C` : 'Aus: nur Boost von Hand'}</div></div>${sbA.state === 'on' ? `<button class="bst" data-sbopen aria-expanded="${!!this._sbOpen}">${this._sbOpen ? 'Zuklappen' : 'Grenzen'}</button>` : ''}<button class="tg" role="switch" aria-label="Solar-Boost" aria-checked="${sbA.state === 'on'}" data-motbool="${sbA.entity_id}"></button></div>`
+      + (sbA.state === 'on' && this._sbOpen ? sbN(sbU, 'Boosten, wenn Raum unter') + sbN(sbB, 'Boosten bis') : '') : '';
     const hpHtml = wpL && wpK ? tgRow('🚫 Wärmepumpe sperren', wpK.state === 'on' ? 'Gesperrt: Die PV-Anhebung bleibt aus' : wpL.state === 'on' ? 'Läuft mit Sonnenüberschuss' : 'Aus: Schaltet bei Überschuss automatisch', wpK.state === 'on', 'data-wplock', 'Wärmepumpe sperren') : '';
     // Marstek B2500: pro Akku ein Auswahlfeld "Charging Mode"; hier beide gemeinsam umschalten
     const mmS = Object.values(S2).filter(x => x.entity_id.startsWith('select.') && /marstek/i.test(x.entity_id) && /charging_mode/i.test(x.entity_id) && Array.isArray(x.attributes.options));
