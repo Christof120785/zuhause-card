@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.11';
+const VERSION = '2.48.12';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -602,7 +602,7 @@ class ZuhauseCard extends HTMLElement {
           <div class="lab up" style="left:64%"><div class="t"><span class="dot" style="background:#fff"></span>Haus</div><div class="v num"><span data-k="vhouse">–</span><small data-k="uhouse">kW</small></div><div class="s" data-k="shouse"></div></div>
           <div class="lab dn" style="left:3%"><div class="t"><span class="dot" data-k="dbk" style="background:var(--sun)"></span>Marstek</div><div class="v num"><span data-k="vbk">–</span><small data-k="ubk">W</small></div><div class="s" data-k="sbk"></div><div class="s" data-k="sbk4"></div><div class="s" data-k="sbk3"></div><div class="s" data-k="sbk2"></div></div>
           <div class="lab dn" style="left:47%;transform:translateX(-50%)"><div class="t"><span class="dot" data-k="dbat" style="background:var(--batt)"></span>Speicher</div><div class="v num"><span data-k="vbat">–</span></div><div class="s" data-k="sbat"></div></div>
-          <div class="lab dn" style="left:66%" data-more="${c.grid_in}"><div class="t"><span class="dot" data-k="dgrid" style="background:var(--grid)"></span>Netz</div><div class="v num"><span data-k="vgrid">–</span><small data-k="ugrid">kW</small></div><div class="s" data-k="sgrid"></div><div class="s" data-k="sgrid2"></div></div>
+          <div class="lab dn" style="left:66%" data-more="${c.grid_in}"><div class="t"><span class="dot" data-k="dgrid" style="background:var(--grid)"></span>Netz</div><div class="v num"><span data-k="vgrid">–</span><small data-k="ugrid">kW</small></div><div class="s" data-k="sgrid"></div><div class="s" data-k="sgrid2"></div><div class="s" data-k="sgrid3"></div></div>
         </div></div>
         <div class="fav" data-k="fav"></div><div class="hxo" data-k="favp" lang="de" hidden></div>
         <div class="carrow" data-more="${c.wallbox}"><span>Auto <b class="num" data-k="csoc">–</b></span><div class="cbar"><i data-k="cbar"></i></div><span class="num">⚡ <span data-k="wbp">–</span> kW · <b data-k="wbtoday">–</b> <b>kWh</b></span></div>
@@ -2814,7 +2814,7 @@ class ZuhauseCard extends HTMLElement {
       const smaKwh = sma && !isNaN(parseFloat(sma.state)) ? parseFloat(sma.state) / ((sma.attributes.unit_of_measurement || '').toLowerCase() === 'wh' ? 1000 : 1) : null;
       if (smaKwh !== null) pv[t] = smaKwh;
       this._set('today', `${de(pv[t], 1)} kWh`);
-      this._set('sgrid2', `heute ${de(gin[t], 1)} kWh Bezug`);
+      this._set('sgrid2', 'Bezug heute'); this._set('sgrid3', `${de(gin[t], 1)} kWh`);
       const use = pv[t] + gin[t] - gout[t];
       this._set('aut', use > 0 ? `${Math.round(Math.max(0, Math.min(1, 1 - gin[t] / use)) * 100)} %` : '–');
       this._set('evbt', pv[t] > 0 ? `${Math.round(Math.max(0, Math.min(1, 1 - gout[t] / pv[t])) * 100)} %` : '–');
