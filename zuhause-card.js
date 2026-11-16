@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.13';
+const VERSION = '2.48.14';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -2566,7 +2566,7 @@ class ZuhauseCard extends HTMLElement {
 
     // Räume unter 21 °C: Hinweis neben dem Wetter, mit Boost-Knopf
     {
-      const el = this._k.cold, cold = (this._roomList || []).filter(r => !(this._lay && this._lay.hidden.includes(r.id))).map(r => {
+      const el = this._k.cold, cold = (this._roomList || []).filter(r => !(this._lay && this._lay.hidden.includes(r.id)) && !/^(büro|arbeitszimmer)$/i.test(r.name)).map(r => { // Büro bewusst kühler (Christof, 16.11.)
         const ts = r.climate.map(x => x.attributes.current_temperature).filter(v => typeof v === 'number');
         return ts.length ? { r, t: ts.reduce((a, b) => a + b, 0) / ts.length, b: this._boostInfo(r.climate.filter(x => this._canBoost(x))), cb: r.climate.some(x => this._canBoost(x)) } : null;
       }).filter(x => x && x.t < 21);
