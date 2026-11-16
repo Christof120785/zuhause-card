@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.14';
+const VERSION = '2.48.15';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -777,6 +777,7 @@ class ZuhauseCard extends HTMLElement {
       const mmb = e.target.closest('[data-mmode]');
       if (mmb) { Object.values(this._hass.states).filter(x => x.entity_id.startsWith('select.') && /marstek/i.test(x.entity_id) && /charging_mode/i.test(x.entity_id)).forEach(x => { const o = (x.attributes.options || []).find(t => mmb.dataset.mmode === 'full' ? /fully|erst/i.test(t) : /simult/i.test(t)); if (o) this._hass.callService('select', 'select_option', { entity_id: x.entity_id, option: o }); }); return; }
       if (e.target.closest('[data-wphp]')) { const l = this._hass.states['light.waermepumpe_pv']; this._hass.callService('light', l && l.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: 'light.waermepumpe_pv' }); return; }
+      if (e.target.closest('[data-prnsw]')) { const id = e.target.closest('[data-prnsw]').dataset.prnsw, x = this._hass.states[id]; this._hass.callService('switch', x && x.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id }); return; }
       if (e.target.closest('[data-wplock]')) { const l = this._hass.states['input_boolean.warmepumpe_pv_gesperrt']; this._hass.callService('input_boolean', l && l.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: 'input_boolean.warmepumpe_pv_gesperrt' }); return; }
       if (e.target.closest('[data-wbsperre]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_anker_entladen_sperren' }); return; }
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
@@ -1542,6 +1543,10 @@ class ZuhauseCard extends HTMLElement {
     const en = all.filter(x => /^(kWh|Wh)$/.test(x.attributes.unit_of_measurement || '') && ok(x));
     const kwh = x => { const v = +x.state; return x.attributes.unit_of_measurement === 'Wh' ? v / 1000 : v; };
     const day = en.find(x => /heute|today|tag|daily/i.test(nm(x))), mon = en.find(x => /monat|month/i.test(nm(x)));
+    // Steckdose des Druckers (schaltet nach 30 Minuten ohne Druck aus, Automation pi_drucker_aus)
+    const E = this._hass.entities || {}, pdev = pw && E[pw.entity_id] && E[pw.entity_id].device_id;
+    const sw = Object.values(this._hass.states).find(x => x.entity_id.startsWith('switch.') && E[x.entity_id] && pdev && E[x.entity_id].device_id === pdev && !/skript|script|ble/i.test(x.entity_id));
+    const swRow = sw ? `<div class="row"><div class="txt"><b>Drucker-Steckdose</b><span>${sw.state === 'on' ? 'An · geht 30 Minuten nach dem Druck aus' : sw.state === 'off' ? 'Aus · zum Drucken einschalten' : 'nicht erreichbar'}</span></div><button class="tg" role="switch" aria-label="Drucker-Steckdose" aria-checked="${sw.state === 'on'}" data-prnsw="${sw.entity_id}"></button></div>` : '';
     let out;
     if (!pw && !en.length) out = '<p class="sub">Wird angezeigt, sobald die Messsteckdose am Drucker in Home Assistant ist.</p>';
     else {
@@ -1550,6 +1555,7 @@ class ZuhauseCard extends HTMLElement {
       out = `<div class="row"><div class="txt"><b style="font-size:26px;font-variant-numeric:tabular-nums">${w == null ? '–' : w.toLocaleString('de-DE') + ' W'}</b><span>${w == null ? '' : w > 20 ? 'Der Drucker druckt oder heizt' : 'Bereit oder aus'}</span></div></div>`
         + `<div class="row"><div class="txt"><b>Heute</b></div><span class="sub">${f(day)}</span></div><div class="row"><div class="txt"><b>Dieser Monat</b></div><span class="sub">${f(mon)}</span></div>`;
     }
+    out = swRow + out;
     if (k.prn.dataset.v !== out) { k.prn.dataset.v = out; k.prn.innerHTML = out; }
   }
   _renderVac() {
