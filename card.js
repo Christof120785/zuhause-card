@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.15';
+const VERSION = '2.48.16';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -2376,6 +2376,11 @@ class ZuhauseCard extends HTMLElement {
     const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
     const S2 = this._hass.states, wpL = S2['light.waermepumpe_pv'], wpK = S2['input_boolean.warmepumpe_pv_gesperrt'];
     const tgRow = (title, sub, on, attr, lbl) => `<div class="row" style="margin-top:10px"><div class="txt"><b>${title}</b><div class="s" style="color:var(--muted);font-size:12px">${sub}</div></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${on}" ${attr}></button></div>`;
+    // Solar-Boost: Fußbodenheizung mit Sonnenüberschuss vorheizen (Automation pi_solar_boost)
+    const sbA = S2['input_boolean.solar_boost_automatisch'], sbU = S2['input_number.solar_boost_nur_unter_temperatur'], sbB = S2['input_number.solar_boost_bis_temperatur'];
+    const sbN = (x, lbl) => { if (!x) return ''; const a = x.attributes, v = +x.state; return `<div class="row mn"><div class="txt"><b>${lbl}</b><span>${isNaN(v) ? '–' : de(v, 1) + ' °C'}</span></div><input type="range" class="dim" min="${a.min}" max="${a.max}" step="${a.step || 0.5}" value="${isNaN(v) ? a.min : v}" data-motnum="${x.entity_id}" data-unit="°C" aria-label="${lbl}"></div>`; };
+    const sbHtml = sbA ? `<div class="row" style="margin-top:10px"><div class="txt"><b>☀️🔥 Solar-Boost Heizung</b><div class="s" style="color:var(--muted);font-size:12px">${sbA.state === 'on' ? 'Boostet bei Überschuss automatisch' : 'Aus: nur Boost von Hand'}</div></div><button class="tg" role="switch" aria-label="Solar-Boost" aria-checked="${sbA.state === 'on'}" data-motbool="${sbA.entity_id}"></button></div>`
+      + (sbA.state === 'on' ? sbN(sbU, 'Boosten, wenn Raum unter') + sbN(sbB, 'Boosten bis') : '') : '';
     const hpHtml = wpL && wpK ? tgRow('🚫 Wärmepumpe sperren', wpK.state === 'on' ? 'Gesperrt: Die PV-Anhebung bleibt aus' : wpL.state === 'on' ? 'Läuft mit Sonnenüberschuss' : 'Aus: Schaltet bei Überschuss automatisch', wpK.state === 'on', 'data-wplock', 'Wärmepumpe sperren') : '';
     // Marstek B2500: pro Akku ein Auswahlfeld "Charging Mode"; hier beide gemeinsam umschalten
     const mmS = Object.values(S2).filter(x => x.entity_id.startsWith('select.') && /marstek/i.test(x.entity_id) && /charging_mode/i.test(x.entity_id) && Array.isArray(x.attributes.options));
@@ -2391,7 +2396,7 @@ class ZuhauseCard extends HTMLElement {
         <div class="wbn-s"><span>☀ nur Sonne</span><span>50/50</span><span>nur Netz</span></div>
         <p class="sub" style="margin:6px 0 0">Bei ${n.share || 30} % kommen höchstens ${n.share || 30} % des Ladestroms aus dem Netz, der Rest von der Sonne. Reicht die Sonne nicht einmal für die Mindestleistung (4,2 kW), entscheidet wieder der Home Manager.</p>
         ${n.akkuOk ? `<div class="row" style="margin-top:8px"><div class="txt"><b>Speicher darf Auto mitladen</b><div class="s" style="color:var(--muted);font-size:12px">${n.akkuOk.state === 'on' ? 'Der Anker hilft beim Laden mit' : n.pause && n.pause.state === 'on' ? 'Anker pausiert, solange das Auto lädt' : 'Aus: Der Anker bleibt fürs Haus voll'}</div></div><button class="tg" role="switch" aria-label="Speicher darf Auto mitladen" aria-checked="${n.akkuOk.state === 'on'}" data-wbakku></button></div>` : ''}
-        <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '') + prHtml + zH + spHtml + hpHtml + mmHtml
+        <button class="btn" data-wbnclose style="margin-top:8px">Fertig</button></div>` : '') + prHtml + zH + spHtml + hpHtml + sbHtml + mmHtml
       + (locked ? `<p class="sub" style="margin:6px 0 0;color:var(--warn,#c77d18)">Der Drehschalter an der Wallbox steht auf Schnellladen. Stell ihn einmal auf die zweite Stellung, dann kannst du hier umschalten.</p>` : '');
     if (k.dataset.v !== html) { k.dataset.v = html; k.innerHTML = html; }
   }
