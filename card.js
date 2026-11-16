@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.12';
+const VERSION = '2.48.13';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -180,6 +180,10 @@ h2{font-family:var(--display);font-size:16px;font-weight:600;margin:4px 0 2px}
 /* Alarm im Kopf */
 .hr{display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;justify-content:flex-end}
 .hr .wxn{align-self:flex-end}
+.cold{align-self:flex-end;border-radius:14px;background:rgba(120,170,255,.14);box-shadow:inset 0 0 0 1px rgba(120,170,255,.35);padding:10px 12px;font-size:13px;min-width:200px}
+.cold b{color:#a9c8ff}.cold .cr{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-top:6px}
+.cold button{all:unset;cursor:pointer;border-radius:99px;padding:3px 10px;font-size:12px;background:rgba(239,138,74,.25);color:#ffc29a}
+.cold button.on{background:rgba(239,138,74,.5);color:#fff}
 .hero .alarm{margin:0;background:rgba(98,196,139,.16);color:var(--hero-fg);grid-template-columns:1fr;min-width:230px}
 .hero .alarm.on{background:rgba(239,138,74,.22)}
 .hero .alarm span{color:var(--hero-mut)}
@@ -562,7 +566,7 @@ class ZuhauseCard extends HTMLElement {
         <div><h1><span data-k="greet">Hallo</span>,<br><em><span data-k="uname">${c.name}</span>.</em></h1>
           <p>Dein Zuhause. Ein Blick. Alles Wichtige.</p>
           <div class="chips"><span class="chip" data-k="chOpen"></span></div><div class="sysw" data-k="sys" hidden></div></div>
-        <div class="hr"><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
+        <div class="hr"><div class="cold" data-k="cold" hidden></div><div class="wxn"><div class="t num"><span data-k="wt">–</span><small>°C</small></div><div data-k="wc"></div><div class="num" data-k="wd"></div></div>
           <div data-k="alarm"></div></div>
       </section>
       <nav class="pg wide" role="tablist" aria-label="Blätter" data-k="pages">${PAGES.map(([k, n]) => `<button role="tab" data-page="${k}" aria-label="${n}" title="${n}" aria-selected="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="${PG_ICO[k]}"/></svg><span>${n}</span></button>`).join('')}</nav>
@@ -2541,6 +2545,16 @@ class ZuhauseCard extends HTMLElement {
       if (w.attributes.humidity != null) parts.push(`${Math.round(w.attributes.humidity)} % Feuchte`);
       if (w.attributes.wind_speed != null) parts.push(`${Math.round(w.attributes.wind_speed)} ${w.attributes.wind_speed_unit || 'km/h'} Wind`);
       this._set('wd', parts.join(' · '));
+    }
+
+    // Räume unter 21 °C: Hinweis neben dem Wetter, mit Boost-Knopf
+    {
+      const el = this._k.cold, cold = (this._roomList || []).filter(r => !(this._lay && this._lay.hidden.includes(r.id))).map(r => {
+        const ts = r.climate.map(x => x.attributes.current_temperature).filter(v => typeof v === 'number');
+        return ts.length ? { r, t: ts.reduce((a, b) => a + b, 0) / ts.length, b: this._boostInfo(r.climate.filter(x => this._canBoost(x))), cb: r.climate.some(x => this._canBoost(x)) } : null;
+      }).filter(x => x && x.t < 21);
+      const html = cold.length ? '<b>🌡️ Unter 21 °C</b>' + cold.map(x => `<div class="cr"><span>${x.r.name} <span class="num">${de(x.t, 1)} °C</span></span>${x.cb ? `<button class="${x.b ? 'on' : ''}" data-boost="${x.r.id}">${x.b ? 'Boost ' + x.b : 'Boost'}</button>` : ''}</div>`).join('') : '';
+      if (el && el._h !== html) { el._h = html; el.innerHTML = html; el.hidden = !html; }
     }
 
     // Energie
