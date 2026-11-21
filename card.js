@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.20';
+const VERSION = '2.48.21';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -38,7 +38,7 @@ const PAGES = [['start', 'Start', ['energy', 'wx', 'waste']], ['raeume', 'Räume
   ['geraete', 'Haushalt', ['app', 'vac', 'prn']], ['energie', 'Energie', ['hist', 'stor']], ['alles', 'Alles', null]];
 
 // Lampen für das Karussell unter dem Energie-Haus: Name im Dashboard, Suchmuster für den Namen in Home Assistant
-const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /^wohnzimmer( gro(ß|ss))?$/i], ['Küche', /k(ü|ue|u)che/i],
+const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /^wohnzimmer( wohnzimmer)?( gro(ß|ss))?$/i], ['Küche', /k(ü|ue|u)che/i],
   ['Flur', /flur/i], ['Esszimmer', /esszimmer/i], ['Carport', /carportlicht( 1)?$/i]];
 
 // Haus-Bild für die Energie-Kachel (liegt im Repo)
