@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.18';
+const VERSION = '2.48.19';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -45,7 +45,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 9;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 10;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -2210,7 +2210,11 @@ class ZuhauseCard extends HTMLElement {
       // Akku-Entladung zählt nicht als Sonne: sonst leert das Auto den Hausakku
       const dis = this._ankerEnt(/entladeleistung|discharg\w* power/i);
       const akku = [dis ? w(dis.entity_id) : '', ...this._marstek().filter(d => d.in && d.out).map(d => `([${w(d.out)} - ${w(d.in)}, 0] | max)`)].filter(Boolean);
-      const freiT = `${w(c.wallbox)} + ${w(c.grid_out)} - ${w(c.grid_in)}${akku.length ? ` - (0 if is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on') else (${akku.join(' + ')}))` : ''}`;
+      // „Auto zuerst“: was der Anker gerade lädt, zählt fürs Auto mit (seit v2.48.19). So muss der Speicher nicht mehr auf 0 W
+      // zurückgehalten werden: er schluckt jede Lücke, wenn das Auto schläft oder weniger nimmt, und es geht nichts ins Netz.
+      const lad = this._ankerEnt(/batterieladeleistung|battery charg\w* power/i, /entlade|discharg/i);
+      const ladT = lad ? ` + (${w(lad.entity_id)} if is_state('input_boolean.zuhause_solar_prioritaet_auto', 'on') else 0)` : '';
+      const freiT = `${w(c.wallbox)} + ${w(c.grid_out)}${ladT} - ${w(c.grid_in)}${akku.length ? ` - (0 if is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on') else (${akku.join(' + ')}))` : ''}`;
       await h.callApi('POST', 'config/automation/config/' + id, {
         id, alias: 'Zuhause: Wallbox PV-Laden mit Netzanteil', max_exceeded: 'silent', description: 'Angelegt vom Zuhause-Dashboard. Regelt die Leistungsbegrenzung der Wallbox: Sonnenüberschuss plus eingestellter Netzanteil. Unter 4,5 kW übernimmt das PV-Laden der Wallbox (lädt selbst ab etwa 1,4 kW mit Sonne); der Netzanteil wird erst zugeschaltet, wenn der Überschuss 2 Minuten lang reicht.', mode: 'single',
         triggers: [{ trigger: 'time_pattern', seconds: '/30' }, { trigger: 'state', entity_id: ['input_number.zuhause_wallbox_netzanteil', 'input_boolean.zuhause_wallbox_pv_regelung'] }],
