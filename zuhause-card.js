@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.17';
+const VERSION = '2.48.18';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -62,7 +62,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 8;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 9;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -2264,15 +2264,43 @@ class ZuhauseCard extends HTMLElement {
           ],
         }],
       });
-      // Hausakku schützen: solange das Auto lädt, gibt der Anker nichts ab (Benutzerdefinierter Modus mit 0 W), danach wieder Eigenverbrauch
+      // Hausakku schützen: solange das Auto lädt, gibt der Anker nichts ab. Seit v2.48.18 lädt er dabei weiter mit Sonne
+      // (Drittanbieter-Modus, „Laden“, jede Minute Ladeleistung = Überschuss; bei „Batterie zuerst“ zählt auch die Wallbox-Leistung mit,
+      // so bekommt der Speicher die Sonne vor dem Auto). Ohne Drittanbieter-Modus wie früher: Benutzerdefiniert mit 0 W.
       const modes = n.aMode ? n.aMode.attributes.options || [] : [];
       const mEig = modes.find(o => /eigenverbrauch|self.?consumption/i.test(o)), mMan = modes.find(o => /benutzerdefiniert|custom|manual/i.test(o));
+      const m3 = modes.find(o => /third.?party|drittanbieter/i.test(o));
       // nur aus diesen Modi pausieren und danach genau dorthin zurück (Christof nutzt mal Eigenverbrauch, mal Smart-Modus)
       const mOk = modes.filter(o => /eigenverbrauch|self.?consumption|smart/i.test(o));
-      if (n.aMode && n.aOut && mEig && mMan) {
-        const am = n.aMode.entity_id, wb = w(c.wallbox);
+      const ank2 = (d, re) => Object.values(h.states).find(x => x.entity_id.startsWith(d + '.') && /solarbank|anker solix/i.test(x.attributes.friendly_name || '') && re.test(x.attributes.friendly_name || ''));
+      const aFlow = ank2('select', /leistungsfluss|power flow/i), aLad = ank2('sensor', /batterieladeleistung|battery charg\w* power/i);
+      const laden = !!(m3 && aFlow && aLad && n.aOut);
+      if (n.aMode && n.aOut && mEig && (mMan || laden)) {
+        const am = n.aMode.entity_id, wb = w(c.wallbox), out = n.aOut.entity_id;
+        const ziel = laden ? `{{ [[ (${w(aLad.entity_id)} + (0 if is_state('input_boolean.zuhause_solar_prioritaet_auto', 'on') else ${wb}) + ${w(c.grid_out)} - ${w(c.grid_in)} - 100) | round(-1) | int, 0] | max, 3000] | min }}` : '';
+        const frei = `is_state('input_boolean.anker_halt_fur_auto_zuruck', 'off')`;
+        const start = laden ? [
+            { action: 'input_text.set_value', target: { entity_id: 'input_text.zuhause_anker_modus_vorher' }, data: { value: `{{ states('${am}') }}` } },
+            { action: 'select.select_option', target: { entity_id: am }, data: { option: m3 } },
+            { delay: { seconds: 5 } },
+            { action: 'select.select_option', target: { entity_id: aFlow.entity_id }, data: { option: 'charge' }, continue_on_error: true },
+            { action: 'number.set_value', target: { entity_id: out }, data: { value: ziel }, continue_on_error: true },
+            { action: 'input_boolean.turn_on', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }] : [
+            { action: 'input_text.set_value', target: { entity_id: 'input_text.zuhause_anker_modus_vorher' }, data: { value: `{{ states('${am}') }}` } },
+            { action: 'number.set_value', target: { entity_id: out }, data: { value: 0 } },
+            { action: 'select.select_option', target: { entity_id: am }, data: { option: mMan } },
+            { action: 'input_boolean.turn_on', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }];
+        const halten = laden ? [{ conditions: [{ condition: 'template', value_template: `{{ is_state('input_boolean.zuhause_anker_pausiert', 'on') and ${wb} >= 300 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and ${frei} }}` }],
+              sequence: [
+                { if: [{ condition: 'template', value_template: `{{ states('${am}') != '${m3}' }}` }], then: [
+                  { action: 'select.select_option', target: { entity_id: am }, data: { option: m3 } }, { delay: { seconds: 5 } }] },
+                { if: [{ condition: 'template', value_template: `{{ not is_state('${aFlow.entity_id}', 'charge') }}` }], then: [
+                  { action: 'select.select_option', target: { entity_id: aFlow.entity_id }, data: { option: 'charge' }, continue_on_error: true }] },
+                { variables: { ziel } },
+                { if: [{ condition: 'template', value_template: `{{ (states('${out}') | float(-1) - ziel | float(0)) | abs >= 50 }}` }], then: [
+                  { action: 'number.set_value', target: { entity_id: out }, data: { value: '{{ ziel }}' }, continue_on_error: true }] }] }] : [];
         await h.callApi('POST', 'config/automation/config/zuhause_wallbox_akku_schutz', {
-          id: 'zuhause_wallbox_akku_schutz', alias: 'Zuhause: Hausakku lädt das Auto nicht', description: 'Angelegt vom Zuhause-Dashboard. Solange das Auto lädt, gibt der Anker-Speicher nichts ab, außer „Speicher darf Auto mitladen“ ist an.', mode: 'queued',
+          id: 'zuhause_wallbox_akku_schutz', alias: 'Zuhause: Hausakku lädt das Auto nicht', description: 'Angelegt vom Zuhause-Dashboard. Solange das Auto lädt, gibt der Anker-Speicher nichts ab, außer „Speicher darf Auto mitladen“ ist an.' + (laden ? ' Seit v2.48.18 lädt er dabei weiter mit Sonnenüberschuss (Drittanbieter-Modus, jede Minute nachgeregelt); bei „Batterie zuerst“ hat der Speicher Vorrang vor dem Auto (bis 3 kW).' : ''), mode: 'queued',
           triggers: [
             { trigger: 'template', value_template: `{{ ${wb} > 1500 }}`, for: { minutes: 1 }, id: 'laedt' },
             { trigger: 'template', value_template: `{{ ${wb} < 300 }}`, for: { minutes: 2 }, id: 'fertig' },
@@ -2282,15 +2310,12 @@ class ZuhauseCard extends HTMLElement {
           ],
           actions: [{ choose: [
             { conditions: [{ condition: 'template', value_template: `{{ ${wb} > 1500 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and is_state('input_boolean.zuhause_anker_pausiert', 'off') and states('${am}') in ${JSON.stringify(mOk)} }}` }],
-              sequence: [
-                { action: 'input_text.set_value', target: { entity_id: 'input_text.zuhause_anker_modus_vorher' }, data: { value: `{{ states('${am}') }}` } },
-                { action: 'number.set_value', target: { entity_id: n.aOut.entity_id }, data: { value: 0 } },
-                { action: 'select.select_option', target: { entity_id: am }, data: { option: mMan } },
-                { action: 'input_boolean.turn_on', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }] },
+              sequence: start },
             { conditions: [{ condition: 'template', value_template: `{{ is_state('input_boolean.zuhause_anker_pausiert', 'on') and (${wb} < 300 or is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on')) }}` }],
               sequence: [
                 { action: 'select.select_option', target: { entity_id: am }, data: { option: `{% set v = states('input_text.zuhause_anker_modus_vorher') %}{{ v if v in ${JSON.stringify(mOk)} else '${mEig}' }}` } },
                 { action: 'input_boolean.turn_off', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }] },
+            ...halten,
           ] }],
         });
       }
