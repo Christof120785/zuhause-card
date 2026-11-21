@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.21';
+const VERSION = '2.48.22';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -45,7 +45,7 @@ const FAV = [['Wohnzimmer klein', /^wohnzimmer klein$/i], ['Wohnzimmer groß', /
 const IMG = 'https://raw.githubusercontent.com/Christof120785/zuhause-card/main/img/';
 const HAUS = IMG + 'haus-energie2.webp';
 // Wallbox-Leistung in W: Mindestleistung (6 A, 3 Phasen) und eingestellte Höchstleistung; WBN_V = Version der Netzanteil-Automation
-const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 10;
+const WB_MIN = 4200, WB_MAX = 11500, WBN_V = 11;
 
 // Farben für Lampen: Name, Farbton
 const LCOL = [['Rot', 0], ['Orange', 28], ['Gelb', 55], ['Grün', 110], ['Türkis', 180], ['Blau', 235], ['Lila', 290]];
@@ -766,6 +766,7 @@ class ZuhauseCard extends HTMLElement {
       if (e.target.closest('[data-wbakku]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_wallbox_akku_erlaubt' }); return; }
       if (e.target.closest('[data-wbnclose]')) { this._wbNOpen = false; this._renderWbMode(); return; }
       if (e.target.closest('[data-sbopen]')) { this._sbOpen = !this._sbOpen; this._renderWbMode(); return; }
+      if (e.target.closest('[data-slopen]')) { this._slOpen = !this._slOpen; this._renderWbMode(); return; }
       if (e.target.closest('[data-wbgear]')) { this._wbNOpen = !this._wbNOpen; this._renderWbMode(); return; }
       const wm = e.target.closest('[data-wbmode]');
       if (wm && !wm.disabled) {
@@ -2277,7 +2278,7 @@ class ZuhauseCard extends HTMLElement {
             { action: 'number.set_value', target: { entity_id: out }, data: { value: 0 } },
             { action: 'select.select_option', target: { entity_id: am }, data: { option: mMan } },
             { action: 'input_boolean.turn_on', target: { entity_id: 'input_boolean.zuhause_anker_pausiert' } }];
-        const halten = laden ? [{ conditions: [{ condition: 'template', value_template: `{{ is_state('input_boolean.zuhause_anker_pausiert', 'on') and ${wb} >= 300 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and ${frei} }}` }],
+        const halten = laden ? [{ conditions: [{ condition: 'template', value_template: `{{ is_state('input_boolean.zuhause_anker_pausiert', 'on') and ${wb} >= 300 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and ${frei} and is_state('input_boolean.zuhause_anker_sofort_laden', 'off') }}` }],
               sequence: [
                 { if: [{ condition: 'template', value_template: `{{ states('${am}') != '${m3}' }}` }], then: [
                   { action: 'select.select_option', target: { entity_id: am }, data: { option: m3 } }, { delay: { seconds: 5 } }] },
@@ -2296,7 +2297,7 @@ class ZuhauseCard extends HTMLElement {
             { trigger: 'time_pattern', minutes: '/1' },
           ],
           actions: [{ choose: [
-            { conditions: [{ condition: 'template', value_template: `{{ ${wb} > 1500 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and is_state('input_boolean.zuhause_anker_pausiert', 'off') and states('${am}') in ${JSON.stringify(mOk)} }}` }],
+            { conditions: [{ condition: 'template', value_template: `{{ ${wb} > 1500 and is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'off') and is_state('input_boolean.zuhause_anker_pausiert', 'off') and states('${am}') in ${JSON.stringify(mOk)} and is_state('input_boolean.zuhause_anker_sofort_laden', 'off') }}` }],
               sequence: start },
             { conditions: [{ condition: 'template', value_template: `{{ is_state('input_boolean.zuhause_anker_pausiert', 'on') and (${wb} < 300 or is_state('input_boolean.zuhause_wallbox_akku_erlaubt', 'on')) }}` }],
               sequence: [
@@ -2403,7 +2404,14 @@ class ZuhauseCard extends HTMLElement {
       this._wbSperT = true;
       this._hass.callWS({ type: 'input_boolean/create', name: 'Zuhause Anker Entladen sperren', icon: 'mdi:battery-lock' }).catch(e => console.warn('zuhause-card: Entladen sperren', e));
     }
-    const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
+    // Anker sofort laden (Automation pi_anker_sofort_laden): aufklappbar unter der Entlade-Sperre, Ziel per Regler
+    const slB = this._hass.states['input_boolean.zuhause_anker_sofort_laden'], slZ = this._hass.states['input_number.zuhause_anker_ladeziel'];
+    const slSoc = this._ankerEnt(/\bsoc\b|ladezustand|state of charge/i), slP = slSoc ? Math.round(+slSoc.state) : null;
+    const slZv = slZ ? Math.round(+slZ.state) : 100;
+    const slHtml = slB && this._slOpen ? `<div class="wbn"><div class="row" style="margin:0"><div class="txt"><b>⚡ Jetzt laden</b><div class="s" style="color:var(--muted);font-size:12px">${slB.state === 'on' ? `Lädt mit 3 kW bis ${slZv} %` : `Aus: lädt mit 3 kW aus Sonne und Netz bis ${slZv} %`}${slP !== null && !isNaN(slP) ? ` · jetzt ${slP} %` : ''}</div></div><button class="tg" role="switch" aria-label="Anker jetzt laden" aria-checked="${slB.state === 'on'}" data-motbool="${slB.entity_id}"></button></div>`
+      + (slZ ? `<div class="row mn"><div class="txt"><b>Ziel</b><span>${slZv} %</span></div><input type="range" class="dim" min="${slZ.attributes.min}" max="${slZ.attributes.max}" step="${slZ.attributes.step || 5}" value="${slZv}" data-motnum="${slZ.entity_id}" data-unit="%" aria-label="Ladeziel"></div>` : '') + `</div>` : '';
+    const slBtn = slB ? `<button class="bst" data-slopen aria-expanded="${!!this._slOpen}">${this._slOpen ? 'Zuklappen' : slB.state === 'on' ? 'Lädt …' : 'Laden'}</button>` : '';
+    const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Anker-Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div>${slBtn}<button class="tg" role="switch" aria-label="Anker-Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>` + slHtml;
     const S2 = this._hass.states, wpL = S2['switch.waermepumpe_pv'], wpK = S2['input_boolean.warmepumpe_pv_gesperrt'];
     const tgRow = (title, sub, on, attr, lbl) => `<div class="row" style="margin-top:10px"><div class="txt"><b>${title}</b><div class="s" style="color:var(--muted);font-size:12px">${sub}</div></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${on}" ${attr}></button></div>`;
     // Solar-Boost: Fußbodenheizung mit Sonnenüberschuss vorheizen (Automation pi_solar_boost)
