@@ -2,7 +2,7 @@
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.19';
+const VERSION = '2.48.20';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -759,7 +759,7 @@ class ZuhauseCard extends HTMLElement {
       if (wt) { const st = this._hass.states['input_text.zuhause_wallbox_zeit_tage']; const cur = new Set(String(st ? st.state : '0123456').split('').filter(c => /[0-6]/.test(c))); const d = wt.dataset.wbtag; cur.has(d) ? cur.delete(d) : cur.add(d); if (cur.size) this._hass.callService('input_text', 'set_value', { entity_id: 'input_text.zuhause_wallbox_zeit_tage', value: [...cur].sort().join('') }); return; }
       const mmb = e.target.closest('[data-mmode]');
       if (mmb) { Object.values(this._hass.states).filter(x => x.entity_id.startsWith('select.') && /marstek/i.test(x.entity_id) && /charging_mode/i.test(x.entity_id)).forEach(x => { const o = (x.attributes.options || []).find(t => mmb.dataset.mmode === 'full' ? /fully|erst/i.test(t) : /simult/i.test(t)); if (o) this._hass.callService('select', 'select_option', { entity_id: x.entity_id, option: o }); }); return; }
-      if (e.target.closest('[data-wphp]')) { const l = this._hass.states['light.waermepumpe_pv']; this._hass.callService('light', l && l.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: 'light.waermepumpe_pv' }); return; }
+      if (e.target.closest('[data-wphp]')) { const l = this._hass.states['switch.waermepumpe_pv']; this._hass.callService('switch', l && l.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: 'switch.waermepumpe_pv' }); return; }
       if (e.target.closest('[data-prnsw]')) { const id = e.target.closest('[data-prnsw]').dataset.prnsw, x = this._hass.states[id]; this._hass.callService('switch', x && x.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id }); return; }
       if (e.target.closest('[data-wplock]')) { const l = this._hass.states['input_boolean.warmepumpe_pv_gesperrt']; this._hass.callService('input_boolean', l && l.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: 'input_boolean.warmepumpe_pv_gesperrt' }); return; }
       if (e.target.closest('[data-wbsperre]')) { this._hass.callService('input_boolean', 'toggle', { entity_id: 'input_boolean.zuhause_anker_entladen_sperren' }); return; }
@@ -2404,7 +2404,7 @@ class ZuhauseCard extends HTMLElement {
       this._hass.callWS({ type: 'input_boolean/create', name: 'Zuhause Anker Entladen sperren', icon: 'mdi:battery-lock' }).catch(e => console.warn('zuhause-card: Entladen sperren', e));
     }
     const spHtml = `<div class="row" style="margin-top:10px"><div class="txt"><b>🔒 Speicher nicht entladen</b><div class="s" style="color:var(--muted);font-size:12px">${!sp ? 'wird eingerichtet' : sp.state === 'on' ? 'Der Anker gibt nichts ans Haus ab, er lädt nur' : 'Aus: Der Anker versorgt das Haus wie sonst'}</div></div><button class="tg" role="switch" aria-label="Speicher nicht entladen" aria-checked="${!!sp && sp.state === 'on'}" ${sp ? '' : 'disabled'} data-wbsperre></button></div>`;
-    const S2 = this._hass.states, wpL = S2['light.waermepumpe_pv'], wpK = S2['input_boolean.warmepumpe_pv_gesperrt'];
+    const S2 = this._hass.states, wpL = S2['switch.waermepumpe_pv'], wpK = S2['input_boolean.warmepumpe_pv_gesperrt'];
     const tgRow = (title, sub, on, attr, lbl) => `<div class="row" style="margin-top:10px"><div class="txt"><b>${title}</b><div class="s" style="color:var(--muted);font-size:12px">${sub}</div></div><button class="tg" role="switch" aria-label="${lbl}" aria-checked="${on}" ${attr}></button></div>`;
     // Solar-Boost: Fußbodenheizung mit Sonnenüberschuss vorheizen (Automation pi_solar_boost)
     const sbA = S2['input_boolean.solar_boost_automatisch'], sbU = S2['input_number.solar_boost_nur_unter_temperatur'], sbB = S2['input_number.solar_boost_bis_temperatur'];
