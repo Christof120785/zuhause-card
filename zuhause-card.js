@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.22';
+const VERSION = '2.48.23';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1802,7 +1802,14 @@ class ZuhauseCard extends HTMLElement {
     if (d.q) {
       const all = k => rooms.filter(r => !this._lay.hidden.includes(r.id)).flatMap(r => r[k]).map(x => x.entity_id);
       if (d.q === 'close' || d.q === 'open') { const ids = all('cover'); if (ids.length) h.callService('cover', d.q + '_cover', { entity_id: ids }); }
-      if (d.q === 'off') { const ids = all('light'); if (ids.length) h.callService('light', 'turn_off', { entity_id: ids }); }
+      // Alle Lichter aus: Lampen und eingeschaltete Licht-Schalter (z. B. Weihnachtssterne, Küche), aber keine Geräte wie Pumpe oder Drucker
+      if (d.q === 'off') {
+        const NOLIGHT = /pumpe|drucker|wasch|trockner|freigabe|strommessung|wallbox|lade|heiz|ventil|sirene|alarm|blitz|filter|roboter/i;
+        const sw = rooms.filter(r => !this._lay.hidden.includes(r.id)).flatMap(r => r.sw)
+          .filter(x => x.state === 'on' && !NOLIGHT.test(x.attributes.friendly_name || x.entity_id)).flatMap(x => x._grp || [x.entity_id]);
+        const ids = all('light').concat(sw);
+        if (ids.length) h.callService('homeassistant', 'turn_off', { entity_id: ids });
+      }
       if (d.q === 'boost') { const ids = rooms.flatMap(r => r.climate).filter(x => this._canBoost(x)).map(x => x.entity_id); if (ids.length) this._startBoost(ids); return done(); }
       return true;
     }
