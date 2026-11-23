@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.23';
+const VERSION = '2.48.24';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -2686,7 +2686,7 @@ class ZuhauseCard extends HTMLElement {
     this._flow('fgrid', Math.abs(grid) > 0.02, grid < 0); // Einspeisung: vom Haus ins Netz
     // Wärmepumpe (Wolf): Außengerät neben dem Haus; PV-Anhebung an = Sonne fließt in die Wärmepumpe
     {
-      const S = this._hass.states, hpId = c.heatpump || Object.keys(S).find(id => id.startsWith('light.') && /w(ä|ae|a)rmepumpe/i.test(id) && /pv/i.test(id));
+      const S = this._hass.states, hpId = c.heatpump || (S['switch.waermepumpe_pv'] ? 'switch.waermepumpe_pv' : Object.keys(S).find(id => /^(light|switch)\./.test(id) && /w(ä|ae|a)rmepumpe/i.test(id) && /pv/i.test(id)));
       const hp = hpId && S[hpId], lkId = c.heatpump_lock || 'input_boolean.warmepumpe_pv_gesperrt', lk = S[lkId];
       if (k.wp) k.wp.hidden = !hp;
       if (k.wpcab) k.wpcab.style.display = hp ? '' : 'none'; // Kabel zur Wärmepumpe immer zeigen, Fluss nur bei PV-Anhebung
