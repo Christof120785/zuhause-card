@@ -19,7 +19,7 @@ function zuhauseLocal() {
 // Alle Geräte stehen in der Dashboard-Konfiguration (type: custom:zuhause-card), nicht in dieser Datei.
 // Leere Einträge sind vorbereitet und zeigen "noch nicht verbunden".
 // Räume, Licht, Jalousien, Heizung und Szenen kommen automatisch aus den Bereichen in Home Assistant.
-const VERSION = '2.48.24';
+const VERSION = '2.48.25';
 
 // Die App lässt die Seite im Hintergrund offen. Beim Zurückkehren prüfen, ob es eine neue Version gibt, und dann neu laden.
 if (!window.__zuhauseUpd) {
@@ -1642,7 +1642,7 @@ class ZuhauseCard extends HTMLElement {
     const allBoost = this._boostInfo(allClim);
     const quick = `<button class="qb" data-q="close">${svg('blind')} Alle Jalousien zu</button><button class="qb" data-q="open">${svg('blind')} Alle auf</button>`
       + `<button class="qb" data-q="off">${svg('bulb')} Alle Lichter aus</button>`
-      + (allClim.length ? `<button class="qb ${allBoost ? 'on' : ''}" data-q="boost">${svg('heat')} ${allBoost ? 'Boost ' + allBoost + ' · verlängern' : 'Boost für alle'}</button>` : '');
+      + (allClim.length ? (() => { const nb = allClim.filter(x => this._boosting(x)).length, all = nb === allClim.length; return `<button class="qb ${all ? 'on' : ''}" data-q="boost">${svg('heat')} ${all && allBoost ? 'Boost für alle ' + allBoost + ' · neu starten' : 'Boost für alle' + (nb ? ' (' + nb + ' von ' + allClim.length + ' laufen)' : '')}</button>`; })() : '');
     const hint = arr ? `<div class="hint">Namen antippen zum Umbenennen. Pfeile verschieben, das Auge blendet aus, die Auswahl legt einen Raum in einen anderen. Raum antippen zeigt seine Geräte zum Umbenennen und Verschieben.<span style="flex:1"></span>Boost-Dauer <input type="number" min="1" max="240" data-boostmin value="${lay.boost_min}" aria-label="Boost-Dauer in Minuten"> min</div>
       <div class="hint">Alarmanlage über die virtuelle Fernbedienung der Zentrale: Tastennummer für Scharf <input type="number" min="1" max="50" data-akey="on" value="${(lay.alarm_key || {}).on || ''}" aria-label="Taste scharf"> und Unscharf <input type="number" min="1" max="50" data-akey="off" value="${(lay.alarm_key || {}).off || ''}" aria-label="Taste unscharf"></div>` : '';
     let html = '';
